@@ -1,23 +1,22 @@
 {
   "name": "com.gamesound.unity",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "displayName": "GameSound for Unity",
-  "description": "Sync GameSound project audio into Unity as AudioClips and emitter-ready assets.",
+  "description": "Import GameSound project audio into Unity and create AudioSource-based event emitters.",
   "unity": "2022.3",
+  "documentationUrl": "https://github.com/vadaso/gamesound-unity#readme",
+  "changelogUrl": "https://github.com/vadaso/gamesound-unity/blob/main/CHANGELOG.md",
   "author": {
-    "name": "GameSound"
+    "name": "GameSound",
+    "url": "https://gamesound.ai"
   },
   "keywords": [
     "audio",
+    "audio-source",
+    "bgm",
+    "emitter",
     "gamesound",
-    "sound",
-    "unity"
-  ],
-  "samples": [
-    {
-      "displayName": "Basic GameSound Emitter",
-      "description": "Minimal usage sample for imported GameSound emitter assets.",
-      "path": "Samples~/Basic"
-    }
+    "sfx",
+    "sound"
   ]
 }

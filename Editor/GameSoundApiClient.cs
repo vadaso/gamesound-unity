@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -8,7 +9,7 @@ namespace GameSound.Unity.Editor
 {
     internal sealed class GameSoundApiClient
     {
-        public const string PackageVersion = "0.3.3";
+        public const string PackageVersion = "0.3.4";
         private const string ProductionApiBaseUrl = "https://gamesound.ai";
 
         private readonly string baseUrl;
@@ -75,21 +76,6 @@ namespace GameSound.Unity.Editor
                 true);
         }
 
-        public Task<UnityConnectionHeartbeatResponse> SendHeartbeatAsync(string projectId, string manifestVersion)
-        {
-            var request = new UnityConnectionHeartbeatRequest
-            {
-                unityProjectGuid = GameSoundEditorPrefs.UnityProjectGuid,
-                clientName = SystemInfo.deviceName,
-                unityVersion = Application.unityVersion,
-                packageVersion = PackageVersion,
-                manifestVersion = manifestVersion
-            };
-            return PostJsonAsync<UnityConnectionHeartbeatRequest, UnityConnectionHeartbeatResponse>(
-                $"/ssr-api/unity/projects/{UnityWebRequest.EscapeURL(projectId)}/unity/connections/heartbeat",
-                request,
-                true);
-        }
 
         public Task LogoutAsync()
         {
@@ -102,6 +88,7 @@ namespace GameSound.Unity.Editor
             {
                 request.downloadHandler = new DownloadHandlerFile(destinationPath) { removeFileOnAbort = true };
                 await SendAsync(request);
+                ValidateDownloadedFile(destinationPath, request.GetResponseHeader("Content-Length"));
             }
         }
 
@@ -127,6 +114,19 @@ namespace GameSound.Unity.Editor
                 if (requiresAuth) AddAuthHeader(request);
                 await SendAsync(request);
                 return JsonUtility.FromJson<TResponse>(request.downloadHandler.text);
+            }
+        }
+
+        private static void ValidateDownloadedFile(string destinationPath, string contentLengthHeader)
+        {
+            if (string.IsNullOrWhiteSpace(contentLengthHeader)) return;
+            if (!long.TryParse(contentLengthHeader, out var expectedBytes)) return;
+            if (expectedBytes < 0) return;
+
+            var actualBytes = new FileInfo(destinationPath).Length;
+            if (actualBytes != expectedBytes)
+            {
+                throw new InvalidOperationException($"GameSound download incomplete. Expected {expectedBytes} bytes but wrote {actualBytes} bytes.");
             }
         }
 

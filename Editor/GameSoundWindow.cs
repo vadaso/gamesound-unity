@@ -69,24 +69,22 @@ namespace GameSound.Unity.Editor
 
         private void DrawHero()
         {
-            var rect = GUILayoutUtility.GetRect(0, 108, GUILayout.ExpandWidth(true));
-            var top = EditorGUIUtility.isProSkin ? new Color(0.10f, 0.12f, 0.18f) : new Color(0.12f, 0.18f, 0.28f);
-            var bottom = EditorGUIUtility.isProSkin ? new Color(0.05f, 0.31f, 0.28f) : new Color(0.04f, 0.46f, 0.39f);
-            var accent = new Color(0.16f, 0.84f, 0.68f);
+            var rect = GUILayoutUtility.GetRect(0, 74, GUILayout.ExpandWidth(true));
+            var background = new Color(0.12f, 0.13f, 0.16f);
+            var accent = new Color(0.16f, 0.68f, 0.86f);
 
-            EditorGUI.DrawRect(rect, top);
-            EditorGUI.DrawRect(new Rect(rect.x, rect.y + rect.height * 0.56f, rect.width, rect.height * 0.44f), bottom);
-            EditorGUI.DrawRect(new Rect(rect.x, rect.yMax - 4, rect.width, 4), accent);
+            EditorGUI.DrawRect(rect, background);
+            EditorGUI.DrawRect(new Rect(rect.x, rect.yMax - 3, rect.width, 3), accent);
 
-            GUI.Label(new Rect(rect.x + 20, rect.y + 18, rect.width - 170, 32), "GameSound", heroTitleStyle);
+            GUI.Label(new Rect(rect.x + 18, rect.y + 12, rect.width - 170, 30), "GameSound", heroTitleStyle);
             GUI.Label(
-                new Rect(rect.x + 21, rect.y + 53, rect.width - 180, 42),
-                "Pull GameSound web sync commands, import project audio, and create emitter-ready components.",
+                new Rect(rect.x + 19, rect.y + 43, rect.width - 180, 22),
+                "Import project audio and create Unity AudioSource emitters.",
                 heroSubtitleStyle);
 
             DrawBadge(
-                new Rect(rect.xMax - 138, rect.y + 22, 118, 26),
-                busy ? "SYNCING" : IsConnected ? "CONNECTED" : "OFFLINE",
+                new Rect(rect.xMax - 138, rect.y + 20, 118, 24),
+                busy ? "WORKING" : IsConnected ? "CONNECTED" : "OFFLINE",
                 busy ? new Color(0.95f, 0.63f, 0.18f) : IsConnected ? new Color(0.13f, 0.74f, 0.47f) : new Color(0.58f, 0.62f, 0.70f));
         }
 
@@ -160,7 +158,7 @@ namespace GameSound.Unity.Editor
 
         private void DrawProjectSection()
         {
-            BeginCard("2. Projects", "Pick a GameSound project, load its manifest, or run sync commands queued from the web workspace.");
+            BeginCard("2. Projects", "Pick a GameSound project, load its manifest, and import the sounds you need.");
 
             if (!IsConnected)
             {
@@ -233,7 +231,7 @@ namespace GameSound.Unity.Editor
                         _ = LoadManifestAsync();
                     }
 
-                    if (DrawTintedButton("Fetch Web Commands", new Color(0.12f, 0.72f, 0.58f), GUILayout.Height(32), GUILayout.Width(170)))
+                    if (GUILayout.Button("Fetch Commands", GUILayout.Height(32), GUILayout.Width(132)))
                     {
                         _ = FetchWebCommandsAsync();
                     }
@@ -459,7 +457,7 @@ namespace GameSound.Unity.Editor
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     DrawSmallDot(IsConnected ? new Color(0.13f, 0.74f, 0.47f) : new Color(0.95f, 0.63f, 0.18f));
-                    EditorGUILayout.LabelField(IsConnected ? "Ready to sync" : "Login required", itemTitleStyle, GUILayout.Width(120));
+                    EditorGUILayout.LabelField(IsConnected ? "Connected" : "Login required", itemTitleStyle, GUILayout.Width(120));
                     EditorGUILayout.LabelField(status, statusTextStyle);
                 }
             }
@@ -660,7 +658,6 @@ namespace GameSound.Unity.Editor
                 if (project == null) return;
                 var api = CreateApi();
                 await LoadManifestInternalAsync(api, project);
-                await SendHeartbeatSafeAsync(api, project);
             });
         }
 
@@ -702,8 +699,7 @@ namespace GameSound.Unity.Editor
                 var api = CreateApi();
                 var project = CurrentProject;
                 var count = await SyncItemsInternalAsync(api, project, items);
-                await SendHeartbeatSafeAsync(api, project);
-                status = $"Synced {count} changed sound(s)";
+                status = $"Updated {count} changed sound(s)";
             });
         }
 
@@ -715,13 +711,12 @@ namespace GameSound.Unity.Editor
                 if (project == null) return;
 
                 var api = CreateApi();
-                await SendHeartbeatSafeAsync(api, project);
                 var response = await api.GetUnityCommandsAsync(project.id, 20);
                 lastCommands = response.commands ?? Array.Empty<GameSoundUnityCommandDto>();
 
                 if (lastCommands.Length == 0)
                 {
-                    status = "No queued Unity commands. Use Sync All if you want to pull manually.";
+                    status = "No queued commands. Use Sync Changed to update imported sounds.";
                     return;
                 }
 
@@ -755,7 +750,6 @@ namespace GameSound.Unity.Editor
                     }
                 }
 
-                await SendHeartbeatSafeAsync(api, project);
                 status = failed == 0
                     ? $"Completed {acked} Unity command(s)"
                     : $"Completed {acked}, failed {failed} Unity command(s)";
@@ -911,18 +905,6 @@ namespace GameSound.Unity.Editor
             }
         }
 
-        private async Task SendHeartbeatSafeAsync(GameSoundApiClient api, GameSoundProjectDto project)
-        {
-            if (api == null || project == null) return;
-            try
-            {
-                await api.SendHeartbeatAsync(project.id, currentManifestVersion);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"GameSound heartbeat skipped: {ex.Message}");
-            }
-        }
 
         private bool IsConnected => !string.IsNullOrWhiteSpace(GameSoundEditorPrefs.AccessToken);
 

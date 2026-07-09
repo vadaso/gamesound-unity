@@ -45,9 +45,13 @@ namespace GameSound.Unity.Editor
             }
 
             await api.DownloadFileAsync(download.url, audioAssetPath);
+
+            var settingsAppliedBeforeImport = ApplyAudioImportSettings(audioAssetPath, item);
             AssetDatabase.ImportAsset(audioAssetPath, ImportAssetOptions.ForceUpdate);
-            ApplyAudioImportSettings(audioAssetPath, item);
-            AssetDatabase.ImportAsset(audioAssetPath, ImportAssetOptions.ForceUpdate);
+            if (!settingsAppliedBeforeImport && ApplyAudioImportSettings(audioAssetPath, item))
+            {
+                AssetDatabase.WriteImportSettingsIfDirty(audioAssetPath);
+            }
 
             var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(audioAssetPath);
             if (clip == null)
@@ -167,10 +171,10 @@ namespace GameSound.Unity.Editor
             return soundMatch;
         }
 
-        private static void ApplyAudioImportSettings(string path, GameSoundManifestItemDto item)
+        private static bool ApplyAudioImportSettings(string path, GameSoundManifestItemDto item)
         {
             var importer = AssetImporter.GetAtPath(path) as AudioImporter;
-            if (importer == null) return;
+            if (importer == null) return false;
 
             importer.forceToMono = false;
             importer.loadInBackground = item.duration >= 10.0;
@@ -197,6 +201,7 @@ namespace GameSound.Unity.Editor
 
             importer.defaultSampleSettings = settings;
             EditorUtility.SetDirty(importer);
+            return true;
         }
 
         private static string BuildAssetFolder(string importRoot, string projectName, string folderPath)

@@ -165,21 +165,4 @@ namespace GameSound.Unity.Editor
         public long timestamp;
     }
 
-    [Serializable]
-    internal sealed class UnityConnectionHeartbeatRequest
-    {
-        public string unityProjectGuid;
-        public string clientName;
-        public string unityVersion;
-        public string packageVersion;
-        public string manifestVersion;
-    }
-
-    [Serializable]
-    internal sealed class UnityConnectionHeartbeatResponse
-    {
-        public string connectionId;
-        public string lastSeenAt;
-        public long timestamp;
-    }
 }
