@@ -1,0 +1,23 @@
+{
+  "name": "com.gamesound.unity",
+  "version": "0.3.3",
+  "displayName": "GameSound for Unity",
+  "description": "Sync GameSound project audio into Unity as AudioClips and emitter-ready assets.",
+  "unity": "2022.3",
+  "author": {
+    "name": "GameSound"
+  },
+  "keywords": [
+    "audio",
+    "gamesound",
+    "sound",
+    "unity"
+  ],
+  "samples": [
+    {
+      "displayName": "Basic GameSound Emitter",
+      "description": "Minimal usage sample for imported GameSound emitter assets.",
+      "path": "Samples~/Basic"
+    }
+  ]
+}
