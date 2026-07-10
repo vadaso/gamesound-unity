@@ -26,7 +26,7 @@ Or add this dependency to `Packages/manifest.json`:
 4. Click **Load Projects** and choose a project.
 5. Click **Refresh from GameSound** to fetch the current project audio list.
 6. Use **Preview**, **Import / Update**, **Create Emitter**, or drag `⇱` into the Scene view.
-7. Leave **Auto Refresh** enabled to update already-imported clips and metadata when the GameSound project changes.
+7. Keep **Auto Refresh (30m)** off for normal use. If you enable it, Unity checks already-imported clips and metadata every 30 minutes while the GameSound window is open.
 8. Use **Update Imported** for an immediate manual update.
 
 ## Imported assets
@@ -44,4 +44,5 @@ Audio and metadata are stored below `Assets/GameSound` by default. Updating an e
 
 - If the package does not update, remove the old entry from `Packages/packages-lock.json` or use Package Manager > Update.
 - If login expires, click **Login in Browser** again.
+- Auto Refresh is off by default. Enable it only if a 30-minute background check is acceptable for your project; Unity may briefly show import/progress UI when changed audio is updated.
 - If Unity reports a truncated MP3, the HTTP download was checked by the importer; re-export/re-upload the original MP3 if the warning persists.

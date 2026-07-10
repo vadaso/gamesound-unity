@@ -72,7 +72,7 @@ namespace GameSound.Unity.Editor
 
         public static bool AutoRefreshEnabled
         {
-            get => EditorPrefs.GetBool(AutoRefreshKey, true);
+            get => EditorPrefs.GetBool(AutoRefreshKey, false);
             set => EditorPrefs.SetBool(AutoRefreshKey, value);
         }
 

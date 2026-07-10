@@ -1,8 +1,8 @@
 {
   "name": "com.gamesound.unity",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "displayName": "GameSound for Unity",
-  "description": "Import GameSound project audio into Unity, auto-refresh imported sounds, and create AudioSource-based event emitters.",
+  "description": "Import GameSound project audio into Unity, manually refresh imported sounds, and create AudioSource-based event emitters.",
   "unity": "2022.3",
   "documentationUrl": "https://github.com/vadaso/gamesound-unity#readme",
   "changelogUrl": "https://github.com/vadaso/gamesound-unity/blob/main/CHANGELOG.md",

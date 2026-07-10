@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.6
+
+- Disable Auto Refresh by default so Unity does not periodically block the editor with audio import/progress UI.
+- Slow optional Auto Refresh to a 30-minute interval and label it as **Auto Refresh (30m)** in the editor.
+- Update README/manual copy to explain that manual refresh is the default workflow and Auto Refresh is opt-in.
+
 ## 0.3.5
 
 - Replace the old web-command workflow with one Unity-owned refresh flow: **Refresh from GameSound**, **Auto Refresh**, and **Update Imported**.

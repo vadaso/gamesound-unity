@@ -10,7 +10,7 @@ namespace GameSound.Unity.Editor
     public sealed class GameSoundWindow : EditorWindow
     {
         private static readonly string[] SourceFilters = { "All", "Library", "AI", "Other" };
-        private const double AutoRefreshIntervalSeconds = 20.0;
+        private const double AutoRefreshIntervalSeconds = 30.0 * 60.0;
 
         private GameSoundProjectDto[] projects = Array.Empty<GameSoundProjectDto>();
         private GameSoundManifestItemDto[] items = Array.Empty<GameSoundManifestItemDto>();
@@ -49,7 +49,7 @@ namespace GameSound.Unity.Editor
             minSize = new Vector2(560, 620);
             SceneView.duringSceneGui += OnSceneGUI;
             EditorApplication.update += OnEditorUpdate;
-            ResetAutoRefreshTimer(3.0);
+            ResetAutoRefreshTimer();
         }
 
         private void OnDisable()
@@ -200,7 +200,7 @@ namespace GameSound.Unity.Editor
             {
                 items = Array.Empty<GameSoundManifestItemDto>();
                 currentManifestVersion = string.Empty;
-                ResetAutoRefreshTimer(1.0);
+                ResetAutoRefreshTimer();
             }
             var project = CurrentProject;
             if (project != null)
@@ -454,14 +454,14 @@ namespace GameSound.Unity.Editor
         private void DrawAutoRefreshToggle()
         {
             var enabled = GameSoundEditorPrefs.AutoRefreshEnabled;
-            var next = GUILayout.Toggle(enabled, "Auto Refresh", GUILayout.Width(112), GUILayout.Height(32));
+            var next = GUILayout.Toggle(enabled, "Auto Refresh (30m)", GUILayout.Width(142), GUILayout.Height(32));
             if (next == enabled) return;
 
             GameSoundEditorPrefs.AutoRefreshEnabled = next;
             status = next
-                ? "Auto Refresh enabled. Unity will update imported sounds while this window is open."
+                ? "Auto Refresh enabled. Unity checks imported sounds every 30 minutes while this window is open."
                 : "Auto Refresh disabled.";
-            ResetAutoRefreshTimer(1.0);
+            ResetAutoRefreshTimer();
         }
 
         private void DrawFooterStatus()

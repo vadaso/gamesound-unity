@@ -9,7 +9,7 @@ namespace GameSound.Unity.Editor
 {
     internal sealed class GameSoundApiClient
     {
-        public const string PackageVersion = "0.3.5";
+        public const string PackageVersion = "0.3.6";
         private const string ProductionApiBaseUrl = "https://gamesound.ai";
 
         private readonly string baseUrl;

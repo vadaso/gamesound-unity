@@ -12,7 +12,7 @@ GameSound for Unity is a Unity Editor package that imports audio from GameSound 
 - `GameSoundEventEmitter` / `GameSoundAudioSource` components backed by Unity `AudioSource`.
 - Play/stop triggers for start, enable, disable, destroy, trigger, collision, mouse, and manual use.
 - Loop, volume, 2D/3D spatial blend, distance, fade-out stop mode, and positive pitch variation.
-- **Refresh from GameSound** and **Auto Refresh** update already-imported sounds and metadata directly from the latest GameSound manifest.
+- **Refresh from GameSound** and **Update Imported** are the primary manual sync controls. Optional **Auto Refresh (30m)** is off by default and checks already-imported sounds only every 30 minutes while the GameSound window is open.
 
 ## Install
 
@@ -40,7 +40,7 @@ For a locked production project, pin a tag or commit hash after testing the curr
 2. Open **Window > GameSound**.
 3. Click **Login in Browser** and approve the Unity connection on GameSound.
 4. Click **Load Projects**, select a project, then click **Refresh from GameSound**.
-5. Use **Import / Update** for one sound. Existing imported sounds stay current with **Auto Refresh** while the window is open.
+5. Use **Import / Update** for one sound, or **Update Imported** to manually update sounds you already imported. Leave **Auto Refresh (30m)** off unless you want Unity to check for updates every 30 minutes while this window is open.
 6. Click **Create Emitter** or drag the `⇱` handle into the Scene view to place an emitter.
 
 Imported audio defaults to:
@@ -76,7 +76,8 @@ Backward-compatible base component. Use `GameSoundEventEmitter` for new objects 
 
 - The package intentionally uses one fixed production API host: `https://gamesound.ai`.
 - Refresh tokens are not stored by the package. If the editor token expires, log in again.
-- Unity may warn that a source MP3 is truncated if the original uploaded MP3 has inconsistent frame length metadata. The importer now validates incomplete HTTP downloads and avoids a duplicate reimport pass, but malformed source audio should be re-exported/re-uploaded in GameSound for a clean Unity import.
+- Auto Refresh is disabled by default because Unity audio imports can briefly block the editor and show progress bars. If enabled, it checks imported sounds every 30 minutes while the GameSound window is open.
+- Unity may warn that a source MP3 is truncated if the original uploaded MP3 has inconsistent frame length metadata. The importer validates incomplete HTTP downloads, but malformed source audio should be re-exported/re-uploaded in GameSound for a clean Unity import.
 - `Documentation~` is kept without Unity `.meta` files because Unity treats `~` package folders as hidden package documentation.
 
 ## Requirements
