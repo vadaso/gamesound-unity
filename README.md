@@ -12,7 +12,7 @@ GameSound for Unity is a Unity Editor package that imports audio from GameSound 
 - `GameSoundEventEmitter` / `GameSoundAudioSource` components backed by Unity `AudioSource`.
 - Play/stop triggers for start, enable, disable, destroy, trigger, collision, mouse, and manual use.
 - Loop, volume, 2D/3D spatial blend, distance, fade-out stop mode, and positive pitch variation.
-- **Refresh from GameSound** and **Update Imported** are the primary manual sync controls. Optional **Auto Refresh (30m)** is off by default and checks already-imported sounds only every 30 minutes while the GameSound window is open.
+- **Refresh from GameSound** and **Update Imported** both fetch the latest project manifest before checking imported sounds. Optional **Auto Refresh (30m)** is off by default and checks already-imported sounds only every 30 minutes while the GameSound window is open.
 
 ## Install
 
@@ -40,7 +40,7 @@ For a locked production project, pin a tag or commit hash after testing the curr
 2. Open **Window > GameSound**.
 3. Click **Login in Browser** and approve the Unity connection on GameSound.
 4. Click **Load Projects**, select a project, then click **Refresh from GameSound**.
-5. Use **Import / Update** for one sound, or **Update Imported** to manually update sounds you already imported. Leave **Auto Refresh (30m)** off unless you want Unity to check for updates every 30 minutes while this window is open.
+5. Use **Import / Update** for one sound, or **Update Imported** to fetch the latest manifest and manually update sounds you already imported. Leave **Auto Refresh (30m)** off unless you want Unity to check for updates every 30 minutes while this window is open.
 6. Click **Create Emitter** or drag the `⇱` handle into the Scene view to place an emitter.
 
 Imported audio defaults to:

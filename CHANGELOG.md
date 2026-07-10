@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.9
+
+- Make **Update Imported** fetch the latest project manifest before checking imported sounds, matching **Refresh from GameSound** instead of reusing a cached list.
+
 ## 0.3.8
 
 - Fix the production API origin to `https://gamesound.ai` internally and remove API host rows from Unity setup/connection UI.

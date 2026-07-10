@@ -693,10 +693,7 @@ namespace GameSound.Unity.Editor
                 var api = CreateApi();
                 var project = CurrentProject;
                 if (project == null) return;
-                if (items.Length == 0)
-                {
-                    await LoadManifestInternalAsync(api, project);
-                }
+                await LoadManifestInternalAsync(api, project, quiet: true);
                 var count = await SyncItemsInternalAsync(api, project, items, onlyImported: true);
                 status = count > 0
                     ? $"Updated {count} imported sound(s)"

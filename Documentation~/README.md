@@ -27,7 +27,7 @@ Or add this dependency to `Packages/manifest.json`:
 5. Click **Refresh from GameSound** to fetch the current project audio list.
 6. Use **Preview**, **Import / Update**, **Create Emitter**, or drag `⇱` into the Scene view.
 7. Keep **Auto Refresh (30m)** off for normal use. If you enable it, Unity checks already-imported clips and metadata every 30 minutes while the GameSound window is open.
-8. Use **Update Imported** for an immediate manual update.
+8. Use **Update Imported** for an immediate manual update. It fetches the latest project manifest first, so it never relies on the list cached in the open window.
 
 ## Imported assets
 
