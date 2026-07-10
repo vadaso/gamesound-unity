@@ -6,15 +6,14 @@ namespace GameSound.Unity
     [CreateAssetMenu(menuName = "GameSound/GameSound Asset", fileName = "GameSoundAsset")]
     public sealed class GameSoundAsset : ScriptableObject
     {
-        [Header("Remote Identity")]
-        [SerializeField] private string projectId;
-        [SerializeField] private string projectName;
-        [SerializeField] private string itemId;
-        [SerializeField] private string soundId;
-        [SerializeField] private string source;
-        [SerializeField] private string versionHash;
+        [SerializeField, HideInInspector] private string projectId;
+        [SerializeField, HideInInspector] private string itemId;
+        [SerializeField, HideInInspector] private string soundId;
+        [SerializeField, HideInInspector] private string versionHash;
 
         [Header("Display")]
+        [SerializeField] private string projectName;
+        [SerializeField] private string source;
         [SerializeField] private string title;
         [SerializeField] private string folderPath;
         [SerializeField] private string soundType;

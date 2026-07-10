@@ -819,10 +819,10 @@ namespace GameSound.Unity.Editor
 
             var settings = item.unity;
             component.Loop = settings.loop;
-            component.Volume = settings.volume;
-            component.SpatialBlend = settings.spatialBlend;
-            component.MinDistance = settings.minDistance;
-            component.MaxDistance = settings.maxDistance;
+            component.Volume = settings.volume > 0f ? settings.volume : 1f;
+            component.SpatialBlend = Mathf.Clamp01(settings.spatialBlend);
+            component.MinDistance = settings.minDistance > 0f ? settings.minDistance : 1f;
+            component.MaxDistance = settings.maxDistance >= component.MinDistance ? settings.maxDistance : Mathf.Max(component.MinDistance, 500f);
 
             var hasPitchRange = !Mathf.Approximately(settings.randomPitchMin, 0f) || !Mathf.Approximately(settings.randomPitchMax, 0f);
             component.RandomizePitch = hasPitchRange;

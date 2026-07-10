@@ -7,12 +7,12 @@ namespace GameSound.Unity
     public sealed class GameSoundSoundReference
     {
         [SerializeField] private GameSoundAsset asset;
-        [SerializeField] private string projectId;
+        [SerializeField, HideInInspector] private string projectId;
         [SerializeField] private string projectName;
-        [SerializeField] private string itemId;
-        [SerializeField] private string soundId;
+        [SerializeField, HideInInspector] private string itemId;
+        [SerializeField, HideInInspector] private string soundId;
         [SerializeField] private string source;
-        [SerializeField] private string versionHash;
+        [SerializeField, HideInInspector] private string versionHash;
         [SerializeField] private string title;
         [SerializeField] private string folderPath;
         [SerializeField] private string soundType;
@@ -36,7 +36,6 @@ namespace GameSound.Unity
             get
             {
                 if (!string.IsNullOrWhiteSpace(title)) return title;
-                if (!string.IsNullOrWhiteSpace(soundId)) return soundId;
                 return "Unassigned GameSound";
             }
         }

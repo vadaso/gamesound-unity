@@ -32,7 +32,7 @@ namespace GameSound.Unity.Editor
             var folder = BuildAssetFolder(importRoot, project.name, item.folderPath);
             EnsureAssetFolder(folder);
 
-            var baseName = SanitizeFileName(string.IsNullOrWhiteSpace(item.title) ? item.soundId : item.title);
+            var baseName = SanitizeFileName(string.IsNullOrWhiteSpace(item.title) ? "GameSound Audio" : item.title);
             var audioAssetPath = AssetDatabase.GenerateUniqueAssetPath($"{folder}/{baseName}{extension}");
             var existingAsset = existingBeforeDownload ?? FindExistingGameSoundAsset(item.itemId, item.soundId);
             if (existingAsset != null && existingAsset.Clip != null)

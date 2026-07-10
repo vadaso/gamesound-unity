@@ -78,6 +78,8 @@ Backward-compatible base component. Use `GameSoundEventEmitter` for new objects 
 - Refresh tokens are not stored by the package. If the editor token expires, log in again.
 - Auto Refresh is disabled by default because Unity audio imports can briefly block the editor and show progress bars. If enabled, it checks imported sounds every 30 minutes while the GameSound window is open.
 - Unity may warn that a source MP3 is truncated if the original uploaded MP3 has inconsistent frame length metadata. The importer validates incomplete HTTP downloads, but malformed source audio should be re-exported/re-uploaded in GameSound for a clean Unity import.
+- GameSound inspectors show project/title/folder/audio details and intentionally hide internal project/item/sound IDs and version hashes.
+- The inspector Play button previews audio through Unity Editor audio preview when not in Play Mode; in Play Mode it calls the runtime emitter.
 - `Documentation~` is kept without Unity `.meta` files because Unity treats `~` package folders as hidden package documentation.
 
 ## Requirements

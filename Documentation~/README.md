@@ -38,11 +38,12 @@ Audio and metadata are stored below `Assets/GameSound` by default. Updating an e
 - `GameSoundEventEmitter`: main FMOD-style emitter component backed by Unity `AudioSource`.
 - `GameSoundAudioSource`: backward-compatible base component name.
 - `GameSoundAsset`: imported audio metadata + `AudioClip` reference.
-- `GameSoundSoundReference`: serialized project/item/sound/version reference copied onto emitters.
+- `GameSoundSoundReference`: internal serialized project/item/sound/version reference copied onto emitters. Internal IDs and hashes are hidden from normal inspectors.
 
 ## Troubleshooting
 
 - If the package does not update, remove the old entry from `Packages/packages-lock.json` or use Package Manager > Update.
 - If login expires, click **Login in Browser** again.
 - Auto Refresh is off by default. Enable it only if a 30-minute background check is acceptable for your project; Unity may briefly show import/progress UI when changed audio is updated.
+- The emitter inspector Play button previews clips in Edit Mode using Unity Editor audio preview. In Play Mode it calls the runtime emitter Play method.
 - If Unity reports a truncated MP3, the HTTP download was checked by the importer; re-export/re-upload the original MP3 if the warning persists.

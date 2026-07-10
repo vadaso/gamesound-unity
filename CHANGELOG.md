@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.7
+
+- Hide internal project/item/sound IDs and version hashes from GameSound Unity inspectors.
+- Make the inspector Play button use Unity Editor audio preview outside Play Mode, so created emitters can be auditioned reliably.
+- Keep runtime Play/Stop behavior unchanged for Play Mode and built games.
+
 ## 0.3.6
 
 - Disable Auto Refresh by default so Unity does not periodically block the editor with audio import/progress UI.
