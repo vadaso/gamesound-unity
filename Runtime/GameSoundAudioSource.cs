@@ -47,6 +47,7 @@ namespace GameSound.Unity
             get
             {
                 EnsureSoundReference();
+                if (sound != null) soundReference.ApplyAsset(sound);
                 return soundReference;
             }
         }

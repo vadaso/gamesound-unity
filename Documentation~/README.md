@@ -24,14 +24,14 @@ Or add this dependency to `Packages/manifest.json`:
 2. Open **Window > GameSound**.
 3. Click **Login in Browser** and approve the GameSound connection.
 4. Click **Load Projects** and choose a project.
-5. Click **Load Manifest** to fetch the current project audio list.
+5. Click **Refresh from GameSound** to fetch the current project audio list.
 6. Use **Preview**, **Import / Update**, **Create Emitter**, or drag `⇱` into the Scene view.
-7. Use **Sync Changed** to update imported clips whose GameSound version changed.
-8. Use **Fetch Commands** only when the GameSound web workspace explicitly queued Unity commands.
+7. Leave **Auto Refresh** enabled to update already-imported clips and metadata when the GameSound project changes.
+8. Use **Update Imported** for an immediate manual update.
 
 ## Imported assets
 
-Audio and metadata are stored below `Assets/GameSound` by default. Updating an existing imported sound reuses the previous `AudioClip` path so scene references stay stable.
+Audio and metadata are stored below `Assets/GameSound` by default. Updating an existing imported sound reuses the previous `AudioClip` path so scene references stay stable. Metadata-only changes such as title, folder, source, type, and duration are refreshed without downloading the audio again.
 
 ## Components
 

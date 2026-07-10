@@ -7,12 +7,12 @@ GameSound for Unity is a Unity Editor package that imports audio from GameSound 
 - Browser login against `https://gamesound.ai` with a short-lived Unity editor access token.
 - Project picker and manifest loader for GameSound project audio.
 - Import/update sounds into `Assets/GameSound` while preserving existing Unity `.meta` references on re-sync.
-- Search, source filter, folder grouping, browser preview, single import, and changed-only sync.
+- Search, source filter, folder grouping, browser preview, single import, and changed-only updates.
 - Drag a sound from the GameSound window into the Scene view to create a `GameSoundEventEmitter`.
 - `GameSoundEventEmitter` / `GameSoundAudioSource` components backed by Unity `AudioSource`.
 - Play/stop triggers for start, enable, disable, destroy, trigger, collision, mouse, and manual use.
 - Loop, volume, 2D/3D spatial blend, distance, fade-out stop mode, and positive pitch variation.
-- Optional manual **Fetch Commands** action for web-created Unity commands when the GameSound web app queues them.
+- **Refresh from GameSound** and **Auto Refresh** update already-imported sounds and metadata directly from the latest GameSound manifest.
 
 ## Install
 
@@ -39,8 +39,8 @@ For a locked production project, pin a tag or commit hash after testing the curr
 1. Open **Window > GameSound > Setup Wizard** and check the import folder / scene audio basics.
 2. Open **Window > GameSound**.
 3. Click **Login in Browser** and approve the Unity connection on GameSound.
-4. Click **Load Projects**, select a project, then click **Load Manifest**.
-5. Use **Import / Update** for one sound or **Sync Changed** for all changed sounds.
+4. Click **Load Projects**, select a project, then click **Refresh from GameSound**.
+5. Use **Import / Update** for one sound. Existing imported sounds stay current with **Auto Refresh** while the window is open.
 6. Click **Create Emitter** or drag the `⇱` handle into the Scene view to place an emitter.
 
 Imported audio defaults to:

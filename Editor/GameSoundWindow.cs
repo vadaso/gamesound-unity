@@ -10,10 +10,10 @@ namespace GameSound.Unity.Editor
     public sealed class GameSoundWindow : EditorWindow
     {
         private static readonly string[] SourceFilters = { "All", "Library", "AI", "Other" };
+        private const double AutoRefreshIntervalSeconds = 20.0;
 
         private GameSoundProjectDto[] projects = Array.Empty<GameSoundProjectDto>();
         private GameSoundManifestItemDto[] items = Array.Empty<GameSoundManifestItemDto>();
-        private GameSoundUnityCommandDto[] lastCommands = Array.Empty<GameSoundUnityCommandDto>();
         private int selectedProjectIndex;
         private int selectedSourceFilter;
         private Vector2 scroll;
@@ -23,6 +23,8 @@ namespace GameSound.Unity.Editor
         private bool showFallbackLoginCode;
         private string searchQuery = string.Empty;
         private DeviceStartResponse pendingLogin;
+        private double nextAutoRefreshAt;
+        private bool autoRefreshInFlight;
         private readonly Dictionary<string, bool> folderFoldouts = new Dictionary<string, bool>();
 
         private GUIStyle heroTitleStyle;
@@ -46,11 +48,14 @@ namespace GameSound.Unity.Editor
         {
             minSize = new Vector2(560, 620);
             SceneView.duringSceneGui += OnSceneGUI;
+            EditorApplication.update += OnEditorUpdate;
+            ResetAutoRefreshTimer(3.0);
         }
 
         private void OnDisable()
         {
             SceneView.duringSceneGui -= OnSceneGUI;
+            EditorApplication.update -= OnEditorUpdate;
         }
 
         private void OnGUI()
@@ -158,7 +163,7 @@ namespace GameSound.Unity.Editor
 
         private void DrawProjectSection()
         {
-            BeginCard("2. Projects", "Pick a GameSound project, load its manifest, and import the sounds you need.");
+            BeginCard("2. Projects", "Pick a GameSound project. Unity refreshes imported sounds directly from GameSound.");
 
             if (!IsConnected)
             {
@@ -194,8 +199,8 @@ namespace GameSound.Unity.Editor
             if (selectedProjectIndex != previousProjectIndex)
             {
                 items = Array.Empty<GameSoundManifestItemDto>();
-                lastCommands = Array.Empty<GameSoundUnityCommandDto>();
                 currentManifestVersion = string.Empty;
+                ResetAutoRefreshTimer(1.0);
             }
             var project = CurrentProject;
             if (project != null)
@@ -226,29 +231,12 @@ namespace GameSound.Unity.Editor
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    if (DrawTintedButton("Load Manifest", new Color(0.22f, 0.55f, 0.95f), GUILayout.Height(32)))
+                    if (DrawTintedButton("Refresh from GameSound", new Color(0.22f, 0.55f, 0.95f), GUILayout.Height(32)))
                     {
-                        _ = LoadManifestAsync();
+                        _ = RefreshFromGameSoundAsync();
                     }
 
-                    if (GUILayout.Button("Fetch Commands", GUILayout.Height(32), GUILayout.Width(132)))
-                    {
-                        _ = FetchWebCommandsAsync();
-                    }
-                }
-            }
-
-            if (lastCommands.Length > 0)
-            {
-                using (new EditorGUILayout.VerticalScope(nestedCardStyle))
-                {
-                    EditorGUILayout.LabelField("Last fetched commands", itemTitleStyle);
-                    foreach (var command in lastCommands)
-                    {
-                        EditorGUILayout.LabelField(
-                            FormatCommandType(command.commandType),
-                            string.IsNullOrWhiteSpace(command.status) ? "claimed" : command.status);
-                    }
+                    DrawAutoRefreshToggle();
                 }
             }
 
@@ -261,7 +249,7 @@ namespace GameSound.Unity.Editor
 
             if (items.Length == 0)
             {
-                DrawEmptyState("Select a project and load its manifest.");
+                DrawEmptyState("Select a project and refresh from GameSound.");
                 EndCard();
                 return;
             }
@@ -274,9 +262,9 @@ namespace GameSound.Unity.Editor
 
                 using (new EditorGUI.DisabledScope(busy))
                 {
-                    if (DrawTintedButton("Sync Changed", new Color(0.12f, 0.72f, 0.58f), GUILayout.Width(118), GUILayout.Height(22)))
+                    if (DrawTintedButton("Update Imported", new Color(0.12f, 0.72f, 0.58f), GUILayout.Width(132), GUILayout.Height(22)))
                     {
-                        _ = SyncAllAsync();
+                        _ = UpdateImportedAsync();
                     }
                 }
             }
@@ -463,6 +451,19 @@ namespace GameSound.Unity.Editor
             }
         }
 
+        private void DrawAutoRefreshToggle()
+        {
+            var enabled = GameSoundEditorPrefs.AutoRefreshEnabled;
+            var next = GUILayout.Toggle(enabled, "Auto Refresh", GUILayout.Width(112), GUILayout.Height(32));
+            if (next == enabled) return;
+
+            GameSoundEditorPrefs.AutoRefreshEnabled = next;
+            status = next
+                ? "Auto Refresh enabled. Unity will update imported sounds while this window is open."
+                : "Auto Refresh disabled.";
+            ResetAutoRefreshTimer(1.0);
+        }
+
         private void DrawFooterStatus()
         {
             var rect = GUILayoutUtility.GetRect(0, 28, GUILayout.ExpandWidth(true));
@@ -555,16 +556,6 @@ namespace GameSound.Unity.Editor
             return time.TotalHours >= 1 ? time.ToString(@"h\:mm\:ss") : time.ToString(@"m\:ss");
         }
 
-        private static string FormatCommandType(string commandType)
-        {
-            if (string.Equals(commandType, "sync_project", StringComparison.OrdinalIgnoreCase)) return "Sync Project";
-            if (string.Equals(commandType, "refresh_manifest", StringComparison.OrdinalIgnoreCase)) return "Refresh Manifest";
-            if (string.Equals(commandType, "sync_item", StringComparison.OrdinalIgnoreCase)) return "Sync Item";
-            if (string.Equals(commandType, "import_item", StringComparison.OrdinalIgnoreCase)) return "Import Item";
-            if (string.Equals(commandType, "create_audio_source", StringComparison.OrdinalIgnoreCase)) return "Create Emitter";
-            return string.IsNullOrWhiteSpace(commandType) ? "Unity Command" : commandType;
-        }
-
         private async Task StartBrowserLoginAsync()
         {
             await RunBusyAsync(async () =>
@@ -644,13 +635,12 @@ namespace GameSound.Unity.Editor
             GameSoundEditorPrefs.ClearTokens();
             projects = Array.Empty<GameSoundProjectDto>();
             items = Array.Empty<GameSoundManifestItemDto>();
-            lastCommands = Array.Empty<GameSoundUnityCommandDto>();
             currentManifestVersion = string.Empty;
             pendingLogin = null;
             showFallbackLoginCode = false;
         }
 
-        private Task LoadManifestAsync()
+        private Task RefreshFromGameSoundAsync()
         {
             return RunBusyAsync(async () =>
             {
@@ -658,6 +648,11 @@ namespace GameSound.Unity.Editor
                 if (project == null) return;
                 var api = CreateApi();
                 await LoadManifestInternalAsync(api, project);
+                var count = await SyncItemsInternalAsync(api, project, items, onlyImported: true);
+                status = count > 0
+                    ? $"Updated {count} imported sound(s) from GameSound"
+                    : $"Loaded latest manifest from {project.name}";
+                ResetAutoRefreshTimer();
             });
         }
 
@@ -692,77 +687,35 @@ namespace GameSound.Unity.Editor
             });
         }
 
-        private Task SyncAllAsync()
+        private Task UpdateImportedAsync()
         {
             return RunBusyAsync(async () =>
             {
                 var api = CreateApi();
-                var project = CurrentProject;
-                var count = await SyncItemsInternalAsync(api, project, items);
-                status = $"Updated {count} changed sound(s)";
-            });
-        }
-
-        private Task FetchWebCommandsAsync()
-        {
-            return RunBusyAsync(async () =>
-            {
                 var project = CurrentProject;
                 if (project == null) return;
-
-                var api = CreateApi();
-                var response = await api.GetUnityCommandsAsync(project.id, 20);
-                lastCommands = response.commands ?? Array.Empty<GameSoundUnityCommandDto>();
-
-                if (lastCommands.Length == 0)
+                if (items.Length == 0)
                 {
-                    status = "No queued commands. Use Sync Changed to update imported sounds.";
-                    return;
+                    await LoadManifestInternalAsync(api, project);
                 }
-
-                var acked = 0;
-                var failed = 0;
-                foreach (var command in lastCommands)
-                {
-                    try
-                    {
-                        status = $"Running {FormatCommandType(command.commandType)}...";
-                        Repaint();
-                        await ProcessUnityCommandAsync(api, project, command);
-                        await api.AckUnityCommandAsync(command.id, true);
-                        command.status = "acked";
-                        acked++;
-                    }
-                    catch (Exception ex)
-                    {
-                        failed++;
-                        command.status = "failed";
-                        command.errorMessage = ex.Message;
-                        Debug.LogException(ex);
-                        try
-                        {
-                            await api.AckUnityCommandAsync(command.id, false, ex.Message);
-                        }
-                        catch (Exception ackEx)
-                        {
-                            Debug.LogException(ackEx);
-                        }
-                    }
-                }
-
-                status = failed == 0
-                    ? $"Completed {acked} Unity command(s)"
-                    : $"Completed {acked}, failed {failed} Unity command(s)";
+                var count = await SyncItemsInternalAsync(api, project, items, onlyImported: true);
+                status = count > 0
+                    ? $"Updated {count} imported sound(s)"
+                    : "Imported sounds are already current";
+                ResetAutoRefreshTimer();
             });
         }
 
-        private async Task LoadManifestInternalAsync(GameSoundApiClient api, GameSoundProjectDto project)
+        private async Task LoadManifestInternalAsync(GameSoundApiClient api, GameSoundProjectDto project, bool quiet = false)
         {
             if (project == null) return;
             var response = await api.GetManifestAsync(project.id);
             items = response.items ?? Array.Empty<GameSoundManifestItemDto>();
             currentManifestVersion = response.manifestVersion ?? string.Empty;
-            status = $"Loaded {items.Length} sound(s) from {project.name}";
+            if (!quiet)
+            {
+                status = $"Loaded {items.Length} sound(s) from {project.name}";
+            }
         }
 
         private async Task<GameSoundAsset> ImportOneInternalAsync(GameSoundApiClient api, GameSoundProjectDto project, GameSoundManifestItemDto item)
@@ -774,7 +727,12 @@ namespace GameSound.Unity.Editor
             return asset;
         }
 
-        private async Task<int> SyncItemsInternalAsync(GameSoundApiClient api, GameSoundProjectDto project, GameSoundManifestItemDto[] manifestItems)
+        private async Task<int> SyncItemsInternalAsync(
+            GameSoundApiClient api,
+            GameSoundProjectDto project,
+            GameSoundManifestItemDto[] manifestItems,
+            bool onlyImported = false,
+            bool quiet = false)
         {
             if (project == null) throw new InvalidOperationException("Select a project first.");
             var count = 0;
@@ -783,18 +741,59 @@ namespace GameSound.Unity.Editor
             var syncItems = manifestItems ?? Array.Empty<GameSoundManifestItemDto>();
             foreach (var item in syncItems)
             {
+                if (onlyImported && !GameSoundImporter.IsImported(item, importedVersionIndex))
+                {
+                    continue;
+                }
+
                 if (GameSoundImporter.IsImportedAndCurrent(item, importedVersionIndex))
                 {
-                    skipped++;
-                    status = $"Skipped current {skipped}, synced {count}: {item.title}";
-                    Repaint();
+                    if (GameSoundImporter.RefreshMetadataIfImported(project, item))
+                    {
+                        count++;
+                        if (!quiet)
+                        {
+                            status = $"Updated metadata {count}: {item.title}";
+                            Repaint();
+                        }
+                    }
+                    else
+                    {
+                        skipped++;
+                        if (!quiet)
+                        {
+                            status = $"Skipped current {skipped}, updated {count}: {item.title}";
+                            Repaint();
+                        }
+                    }
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(item.versionHash) && GameSoundImporter.IsImported(item, importedVersionIndex))
+                {
+                    if (GameSoundImporter.RefreshMetadataIfImported(project, item))
+                    {
+                        count++;
+                        if (!quiet)
+                        {
+                            status = $"Updated metadata {count}: {item.title}";
+                            Repaint();
+                        }
+                    }
+                    else
+                    {
+                        skipped++;
+                    }
                     continue;
                 }
 
                 await GameSoundImporter.ImportAsync(api, project, item, GameSoundEditorPrefs.ImportRoot);
                 count++;
-                status = $"Synced changed {count}/{syncItems.Length}: {item.title}";
-                Repaint();
+                if (!quiet)
+                {
+                    status = $"Updated changed {count}/{syncItems.Length}: {item.title}";
+                    Repaint();
+                }
             }
             return count;
         }
@@ -812,72 +811,6 @@ namespace GameSound.Unity.Editor
             Selection.activeGameObject = go;
             Undo.RegisterCreatedObjectUndo(go, "Create GameSound Event Emitter");
             return component;
-        }
-
-        private async Task ProcessUnityCommandAsync(GameSoundApiClient api, GameSoundProjectDto project, GameSoundUnityCommandDto command)
-        {
-            var type = command?.commandType ?? string.Empty;
-            if (string.Equals(type, "refresh_manifest", StringComparison.OrdinalIgnoreCase))
-            {
-                await LoadManifestInternalAsync(api, project);
-                return;
-            }
-
-            if (string.Equals(type, "sync_project", StringComparison.OrdinalIgnoreCase))
-            {
-                await LoadManifestInternalAsync(api, project);
-                await SyncItemsInternalAsync(api, project, items);
-                return;
-            }
-
-            if (items.Length == 0)
-            {
-                await LoadManifestInternalAsync(api, project);
-            }
-
-            var item = FindManifestItem(command);
-            if (item == null)
-            {
-                throw new InvalidOperationException($"Cannot find command target item: {command?.itemId ?? command?.soundId ?? command?.id}");
-            }
-
-            if (string.Equals(type, "sync_item", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(type, "import_item", StringComparison.OrdinalIgnoreCase))
-            {
-                await ImportOneInternalAsync(api, project, item);
-                return;
-            }
-
-            if (string.Equals(type, "create_audio_source", StringComparison.OrdinalIgnoreCase))
-            {
-                await CreateAudioSourceInternalAsync(api, project, item);
-                return;
-            }
-
-            throw new InvalidOperationException($"Unsupported Unity command type: {type}");
-        }
-
-        private GameSoundManifestItemDto FindManifestItem(GameSoundUnityCommandDto command)
-        {
-            if (command == null) return null;
-            var itemId = string.IsNullOrWhiteSpace(command.itemId) ? command.projectItemId : command.itemId;
-            if (!string.IsNullOrWhiteSpace(itemId))
-            {
-                foreach (var item in items)
-                {
-                    if (string.Equals(item.itemId, itemId, StringComparison.OrdinalIgnoreCase)) return item;
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(command.soundId))
-            {
-                foreach (var item in items)
-                {
-                    if (string.Equals(item.soundId, command.soundId, StringComparison.OrdinalIgnoreCase)) return item;
-                }
-            }
-
-            return null;
         }
 
         private static void ApplyManifestUnitySettings(GameSoundAudioSource component, GameSoundManifestItemDto item)
@@ -905,6 +838,51 @@ namespace GameSound.Unity.Editor
             }
         }
 
+
+        private void OnEditorUpdate()
+        {
+            if (!GameSoundEditorPrefs.AutoRefreshEnabled) return;
+            if (!IsConnected || CurrentProject == null || busy || autoRefreshInFlight || pendingLogin != null) return;
+
+            var now = EditorApplication.timeSinceStartup;
+            if (now < nextAutoRefreshAt) return;
+            ResetAutoRefreshTimer();
+            _ = AutoRefreshFromGameSoundAsync();
+        }
+
+        private async Task AutoRefreshFromGameSoundAsync()
+        {
+            if (autoRefreshInFlight) return;
+            autoRefreshInFlight = true;
+            try
+            {
+                var project = CurrentProject;
+                if (project == null) return;
+                var api = CreateApi();
+                await LoadManifestInternalAsync(api, project, quiet: true);
+                var count = await SyncItemsInternalAsync(api, project, items, onlyImported: true, quiet: true);
+                if (count > 0)
+                {
+                    status = $"Auto Refresh updated {count} imported sound(s)";
+                    Repaint();
+                }
+            }
+            catch (Exception ex)
+            {
+                status = $"Auto Refresh failed: {ex.Message}";
+                Debug.LogWarning($"GameSound Auto Refresh failed: {ex.Message}");
+                Repaint();
+            }
+            finally
+            {
+                autoRefreshInFlight = false;
+            }
+        }
+
+        private void ResetAutoRefreshTimer(double delaySeconds = AutoRefreshIntervalSeconds)
+        {
+            nextAutoRefreshAt = EditorApplication.timeSinceStartup + Math.Max(1.0, delaySeconds);
+        }
 
         private bool IsConnected => !string.IsNullOrWhiteSpace(GameSoundEditorPrefs.AccessToken);
 

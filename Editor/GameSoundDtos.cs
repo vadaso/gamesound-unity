@@ -122,47 +122,5 @@ namespace GameSound.Unity.Editor
         public long timestamp;
     }
 
-    [Serializable]
-    internal sealed class UnityCommandsResponse
-    {
-        public GameSoundUnityCommandDto[] commands;
-        public long timestamp;
-    }
-
-    [Serializable]
-    internal sealed class GameSoundUnityCommandDto
-    {
-        public string id;
-        public string projectId;
-        public string createdBy;
-        public string targetUserId;
-        public string targetTokenId;
-        public string commandType;
-        public string itemId;
-        public string projectItemId;
-        public string soundId;
-        public string payloadJson;
-        public string status;
-        public string errorMessage;
-        public string createdAt;
-        public string updatedAt;
-        public string claimedAt;
-        public string ackedAt;
-        public string expiresAt;
-    }
-
-    [Serializable]
-    internal sealed class UnityCommandAckRequest
-    {
-        public string status;
-        public string errorMessage;
-    }
-
-    [Serializable]
-    internal sealed class UnityCommandAckResponse
-    {
-        public GameSoundUnityCommandDto command;
-        public long timestamp;
-    }
 
 }

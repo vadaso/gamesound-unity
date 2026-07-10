@@ -101,11 +101,47 @@ namespace GameSound.Unity.Editor
             return IsAssetCurrent(FindExistingGameSoundAsset(item.itemId, item.soundId), item);
         }
 
+        public static bool IsImported(GameSoundManifestItemDto item, Dictionary<string, string> importedVersionIndex)
+        {
+            if (item == null || importedVersionIndex == null) return false;
+            return HasImportedKey(importedVersionIndex, ItemKey(item.itemId)) ||
+                   HasImportedKey(importedVersionIndex, SoundKey(item.soundId));
+        }
+
         public static bool IsImportedAndCurrent(GameSoundManifestItemDto item, Dictionary<string, string> importedVersionIndex)
         {
             if (item == null || importedVersionIndex == null || string.IsNullOrWhiteSpace(item.versionHash)) return false;
             return TryVersionMatches(importedVersionIndex, ItemKey(item.itemId), item.versionHash) ||
                    TryVersionMatches(importedVersionIndex, SoundKey(item.soundId), item.versionHash);
+        }
+
+        public static bool RefreshMetadataIfImported(GameSoundProjectDto project, GameSoundManifestItemDto item)
+        {
+            if (project == null || item == null) return false;
+
+            var asset = FindExistingGameSoundAsset(item.itemId, item.soundId);
+            if (asset == null || asset.Clip == null || !NeedsMetadataUpdate(asset, project, item))
+            {
+                return false;
+            }
+
+            asset.ApplyRemoteMetadata(
+                project.id,
+                project.name,
+                item.itemId,
+                item.soundId,
+                item.source,
+                string.IsNullOrWhiteSpace(item.versionHash) ? asset.VersionHash : item.versionHash,
+                item.title,
+                item.folderPath,
+                item.type,
+                item.duration,
+                item.format,
+                asset.Clip);
+
+            EditorUtility.SetDirty(asset);
+            AssetDatabase.SaveAssets();
+            return true;
         }
 
         public static Dictionary<string, string> BuildImportedVersionIndex()
@@ -116,11 +152,17 @@ namespace GameSound.Unity.Editor
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
                 var asset = AssetDatabase.LoadAssetAtPath<GameSoundAsset>(path);
-                if (asset == null || asset.Clip == null || string.IsNullOrWhiteSpace(asset.VersionHash)) continue;
-                if (!string.IsNullOrWhiteSpace(asset.ItemId)) index[ItemKey(asset.ItemId)] = asset.VersionHash;
-                if (!string.IsNullOrWhiteSpace(asset.SoundId)) index[SoundKey(asset.SoundId)] = asset.VersionHash;
+                if (asset == null || asset.Clip == null) continue;
+                var version = asset.VersionHash ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(asset.ItemId)) index[ItemKey(asset.ItemId)] = version;
+                if (!string.IsNullOrWhiteSpace(asset.SoundId)) index[SoundKey(asset.SoundId)] = version;
             }
             return index;
+        }
+
+        private static bool HasImportedKey(Dictionary<string, string> index, string key)
+        {
+            return !string.IsNullOrWhiteSpace(key) && index.ContainsKey(key);
         }
 
         private static bool TryVersionMatches(Dictionary<string, string> index, string key, string versionHash)
@@ -145,6 +187,26 @@ namespace GameSound.Unity.Editor
             if (asset == null || item == null || asset.Clip == null) return false;
             if (string.IsNullOrWhiteSpace(item.versionHash)) return false;
             return string.Equals(asset.VersionHash, item.versionHash, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool NeedsMetadataUpdate(GameSoundAsset asset, GameSoundProjectDto project, GameSoundManifestItemDto item)
+        {
+            return !Same(asset.ProjectId, project.id) ||
+                   !Same(asset.ProjectName, project.name) ||
+                   !Same(asset.ItemId, item.itemId) ||
+                   !Same(asset.SoundId, item.soundId) ||
+                   !Same(asset.Source, item.source) ||
+                   (!string.IsNullOrWhiteSpace(item.versionHash) && !Same(asset.VersionHash, item.versionHash)) ||
+                   !Same(asset.Title, item.title) ||
+                   !Same(asset.FolderPath, item.folderPath) ||
+                   !Same(asset.SoundType, item.type) ||
+                   !Same(asset.Format, item.format) ||
+                   Math.Abs(asset.Duration - item.duration) > 0.001;
+        }
+
+        private static bool Same(string left, string right)
+        {
+            return string.Equals(left ?? string.Empty, right ?? string.Empty, StringComparison.Ordinal);
         }
 
         private static GameSoundAsset FindExistingGameSoundAsset(string itemId, string soundId)

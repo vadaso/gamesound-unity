@@ -9,7 +9,7 @@ namespace GameSound.Unity.Editor
 {
     internal sealed class GameSoundApiClient
     {
-        public const string PackageVersion = "0.3.4";
+        public const string PackageVersion = "0.3.5";
         private const string ProductionApiBaseUrl = "https://gamesound.ai";
 
         private readonly string baseUrl;
@@ -53,26 +53,6 @@ namespace GameSound.Unity.Editor
             return PostJsonAsync<object, DownloadResponse>(
                 $"/ssr-api/unity/projects/{UnityWebRequest.EscapeURL(projectId)}/assets/{UnityWebRequest.EscapeURL(soundId)}/download",
                 new EmptyJson(),
-                true);
-        }
-
-        public Task<UnityCommandsResponse> GetUnityCommandsAsync(string projectId, int limit = 20)
-        {
-            var escapedProjectId = UnityWebRequest.EscapeURL(projectId ?? string.Empty);
-            var clampedLimit = Mathf.Clamp(limit, 1, 50);
-            return GetJsonAsync<UnityCommandsResponse>($"/ssr-api/unity/commands?projectId={escapedProjectId}&limit={clampedLimit}");
-        }
-
-        public Task<UnityCommandAckResponse> AckUnityCommandAsync(string commandId, bool success, string errorMessage = null)
-        {
-            var request = new UnityCommandAckRequest
-            {
-                status = success ? "acked" : "failed",
-                errorMessage = success ? null : errorMessage
-            };
-            return PostJsonAsync<UnityCommandAckRequest, UnityCommandAckResponse>(
-                $"/ssr-api/unity/commands/{UnityWebRequest.EscapeURL(commandId)}/ack",
-                request,
                 true);
         }
 

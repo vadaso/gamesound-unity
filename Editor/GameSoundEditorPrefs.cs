@@ -10,6 +10,7 @@ namespace GameSound.Unity.Editor
         private const string AccessTokenExpiresAtKey = "GameSound.Unity.AccessTokenExpiresAt";
         private const string RefreshTokenKey = "GameSound.Unity.RefreshToken";
         private const string ImportRootKey = "GameSound.Unity.ImportRoot";
+        private const string AutoRefreshKey = "GameSound.Unity.AutoRefresh";
         private const string ProductionApiBaseUrl = "https://gamesound.ai";
 
         public static string ApiBaseUrl
@@ -67,6 +68,12 @@ namespace GameSound.Unity.Editor
         {
             get => EditorPrefs.GetString(ImportRootKey, "Assets/GameSound");
             set => EditorPrefs.SetString(ImportRootKey, string.IsNullOrWhiteSpace(value) ? "Assets/GameSound" : value.Trim().TrimEnd('/'));
+        }
+
+        public static bool AutoRefreshEnabled
+        {
+            get => EditorPrefs.GetBool(AutoRefreshKey, true);
+            set => EditorPrefs.SetBool(AutoRefreshKey, value);
         }
 
         public static void ClearTokens()
