@@ -20,8 +20,9 @@ namespace GameSound.Unity.Editor
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (item == null) throw new ArgumentNullException(nameof(item));
+            importRoot = GameSoundEditorPrefs.NormalizeImportRoot(importRoot);
 
-            var existingBeforeDownload = FindExistingGameSoundAsset(item.itemId, item.soundId);
+            var existingBeforeDownload = FindExistingGameSoundAsset(project.id, item.itemId, item.soundId);
             if (!forceDownload && IsAssetCurrent(existingBeforeDownload, item))
             {
                 return existingBeforeDownload;
@@ -34,16 +35,17 @@ namespace GameSound.Unity.Editor
 
             var baseName = SanitizeFileName(string.IsNullOrWhiteSpace(item.title) ? "GameSound Audio" : item.title);
             var audioAssetPath = AssetDatabase.GenerateUniqueAssetPath($"{folder}/{baseName}{extension}");
-            var existingAsset = existingBeforeDownload ?? FindExistingGameSoundAsset(item.itemId, item.soundId);
+            var existingAsset = existingBeforeDownload ?? FindExistingGameSoundAsset(project.id, item.itemId, item.soundId);
             if (existingAsset != null && existingAsset.Clip != null)
             {
                 var existingClipPath = AssetDatabase.GetAssetPath(existingAsset.Clip);
-                if (!string.IsNullOrWhiteSpace(existingClipPath))
+                if (IsSafeExistingAudioPath(existingClipPath, extension))
                 {
                     audioAssetPath = existingClipPath;
                 }
             }
 
+            AssetDatabase.ReleaseCachedFileHandles();
             await api.DownloadFileAsync(download.url, audioAssetPath);
 
             var settingsAppliedBeforeImport = ApplyAudioImportSettings(audioAssetPath, item);
@@ -95,31 +97,27 @@ namespace GameSound.Unity.Editor
             return asset;
         }
 
-        public static bool IsImportedAndCurrent(GameSoundManifestItemDto item)
-        {
-            if (item == null) return false;
-            return IsAssetCurrent(FindExistingGameSoundAsset(item.itemId, item.soundId), item);
-        }
-
-        public static bool IsImported(GameSoundManifestItemDto item, Dictionary<string, string> importedVersionIndex)
+        public static bool IsImported(string projectId, GameSoundManifestItemDto item, Dictionary<string, string> importedVersionIndex)
         {
             if (item == null || importedVersionIndex == null) return false;
-            return HasImportedKey(importedVersionIndex, ItemKey(item.itemId)) ||
-                   HasImportedKey(importedVersionIndex, SoundKey(item.soundId));
+            return !string.IsNullOrWhiteSpace(item.itemId)
+                ? HasImportedKey(importedVersionIndex, ItemKey(projectId, item.itemId))
+                : HasImportedKey(importedVersionIndex, SoundKey(projectId, item.soundId));
         }
 
-        public static bool IsImportedAndCurrent(GameSoundManifestItemDto item, Dictionary<string, string> importedVersionIndex)
+        public static bool IsImportedAndCurrent(string projectId, GameSoundManifestItemDto item, Dictionary<string, string> importedVersionIndex)
         {
             if (item == null || importedVersionIndex == null || string.IsNullOrWhiteSpace(item.versionHash)) return false;
-            return TryVersionMatches(importedVersionIndex, ItemKey(item.itemId), item.versionHash) ||
-                   TryVersionMatches(importedVersionIndex, SoundKey(item.soundId), item.versionHash);
+            return !string.IsNullOrWhiteSpace(item.itemId)
+                ? TryVersionMatches(importedVersionIndex, ItemKey(projectId, item.itemId), item.versionHash)
+                : TryVersionMatches(importedVersionIndex, SoundKey(projectId, item.soundId), item.versionHash);
         }
 
         public static bool RefreshMetadataIfImported(GameSoundProjectDto project, GameSoundManifestItemDto item)
         {
             if (project == null || item == null) return false;
 
-            var asset = FindExistingGameSoundAsset(item.itemId, item.soundId);
+            var asset = FindExistingGameSoundAsset(project.id, item.itemId, item.soundId);
             if (asset == null || asset.Clip == null || !NeedsMetadataUpdate(asset, project, item))
             {
                 return false;
@@ -154,8 +152,8 @@ namespace GameSound.Unity.Editor
                 var asset = AssetDatabase.LoadAssetAtPath<GameSoundAsset>(path);
                 if (asset == null || asset.Clip == null) continue;
                 var version = asset.VersionHash ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(asset.ItemId)) index[ItemKey(asset.ItemId)] = version;
-                if (!string.IsNullOrWhiteSpace(asset.SoundId)) index[SoundKey(asset.SoundId)] = version;
+                if (!string.IsNullOrWhiteSpace(asset.ItemId)) index[ItemKey(asset.ProjectId, asset.ItemId)] = version;
+                if (!string.IsNullOrWhiteSpace(asset.SoundId)) index[SoundKey(asset.ProjectId, asset.SoundId)] = version;
             }
             return index;
         }
@@ -172,14 +170,18 @@ namespace GameSound.Unity.Editor
                    string.Equals(importedVersion, versionHash, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static string ItemKey(string itemId)
+        private static string ItemKey(string projectId, string itemId)
         {
-            return string.IsNullOrWhiteSpace(itemId) ? null : "item:" + itemId;
+            return string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(itemId)
+                ? null
+                : "project:" + projectId + ":item:" + itemId;
         }
 
-        private static string SoundKey(string soundId)
+        private static string SoundKey(string projectId, string soundId)
         {
-            return string.IsNullOrWhiteSpace(soundId) ? null : "sound:" + soundId;
+            return string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(soundId)
+                ? null
+                : "project:" + projectId + ":sound:" + soundId;
         }
 
         private static bool IsAssetCurrent(GameSoundAsset asset, GameSoundManifestItemDto item)
@@ -209,28 +211,29 @@ namespace GameSound.Unity.Editor
             return string.Equals(left ?? string.Empty, right ?? string.Empty, StringComparison.Ordinal);
         }
 
-        private static GameSoundAsset FindExistingGameSoundAsset(string itemId, string soundId)
+        private static GameSoundAsset FindExistingGameSoundAsset(string projectId, string itemId, string soundId)
         {
-            if (string.IsNullOrWhiteSpace(itemId) && string.IsNullOrWhiteSpace(soundId)) return null;
+            if (string.IsNullOrWhiteSpace(projectId) ||
+                (string.IsNullOrWhiteSpace(itemId) && string.IsNullOrWhiteSpace(soundId))) return null;
+
             var guids = AssetDatabase.FindAssets("t:GameSoundAsset");
-            GameSoundAsset soundMatch = null;
             foreach (var guid in guids)
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
                 var asset = AssetDatabase.LoadAssetAtPath<GameSoundAsset>(path);
-                if (asset == null) continue;
+                if (asset == null || !Same(asset.ProjectId, projectId)) continue;
 
-                if (!string.IsNullOrWhiteSpace(itemId) && asset.ItemId == itemId)
+                if (!string.IsNullOrWhiteSpace(itemId) && Same(asset.ItemId, itemId))
                 {
                     return asset;
                 }
 
-                if (soundMatch == null && !string.IsNullOrWhiteSpace(soundId) && asset.SoundId == soundId)
+                if (string.IsNullOrWhiteSpace(itemId) && !string.IsNullOrWhiteSpace(soundId) && Same(asset.SoundId, soundId))
                 {
-                    soundMatch = asset;
+                    return asset;
                 }
             }
-            return soundMatch;
+            return null;
         }
 
         private static bool ApplyAudioImportSettings(string path, GameSoundManifestItemDto item)
@@ -268,7 +271,7 @@ namespace GameSound.Unity.Editor
 
         private static string BuildAssetFolder(string importRoot, string projectName, string folderPath)
         {
-            var root = string.IsNullOrWhiteSpace(importRoot) ? "Assets/GameSound" : importRoot.Trim().TrimEnd('/');
+            var root = GameSoundEditorPrefs.NormalizeImportRoot(importRoot);
             var project = SanitizePathSegment(projectName);
             var remote = string.IsNullOrWhiteSpace(folderPath) ? string.Empty : SanitizeRelativePath(folderPath);
             return string.IsNullOrWhiteSpace(remote) ? $"{root}/{project}" : $"{root}/{project}/{remote}";
@@ -297,7 +300,18 @@ namespace GameSound.Unity.Editor
             format = (format ?? "mp3").Trim().TrimStart('.').ToLowerInvariant();
             if (format == "mpeg") format = "mp3";
             if (format == "wave") format = "wav";
-            return "." + format;
+            if (format == "aiff") format = "aif";
+
+            switch (format)
+            {
+                case "mp3":
+                case "wav":
+                case "ogg":
+                case "aif":
+                    return "." + format;
+                default:
+                    throw new InvalidOperationException($"Unsupported GameSound audio format for Unity import: {format}");
+            }
         }
 
         private static string SanitizeRelativePath(string path)
@@ -313,15 +327,35 @@ namespace GameSound.Unity.Editor
         private static string SanitizePathSegment(string value)
         {
             var sanitized = SanitizeFileName(value);
-            return string.IsNullOrWhiteSpace(sanitized) ? "Untitled" : sanitized;
+            return string.IsNullOrWhiteSpace(sanitized) || sanitized == "." || sanitized == ".." ? "Untitled" : sanitized;
         }
 
         private static string SanitizeFileName(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return "Untitled";
-            var invalid = Regex.Escape(new string(Path.GetInvalidFileNameChars()) + new string(Path.GetInvalidPathChars()));
-            var sanitized = Regex.Replace(value, $"[{invalid}]", "_").Trim();
+            var crossPlatformInvalid = "<>:\"/\\|?*";
+            var invalid = Regex.Escape(new string(Path.GetInvalidFileNameChars()) + new string(Path.GetInvalidPathChars()) + crossPlatformInvalid);
+            var sanitized = Regex.Replace(value, $"[{invalid}]", "_").Trim().TrimEnd('.', ' ');
+            sanitized = Regex.Replace(sanitized, @"[\x00-\x1F]", "_");
+            if (GameSoundEditorPrefs.IsWindowsReservedPathSegment(sanitized)) sanitized = "_" + sanitized;
             return string.IsNullOrWhiteSpace(sanitized) ? "Untitled" : sanitized;
+        }
+
+        private static bool IsSafeExistingAudioPath(string assetPath, string expectedExtension)
+        {
+            if (string.IsNullOrWhiteSpace(assetPath) || string.IsNullOrWhiteSpace(expectedExtension)) return false;
+
+            var normalized = assetPath.Trim().Replace('\\', '/');
+            if (!normalized.StartsWith("Assets/", StringComparison.Ordinal) ||
+                normalized.Contains("/../") ||
+                normalized.EndsWith("/..", StringComparison.Ordinal) ||
+                normalized.Contains("/./") ||
+                normalized.EndsWith("/.", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return string.Equals(Path.GetExtension(normalized), expectedExtension, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

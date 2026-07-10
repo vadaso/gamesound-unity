@@ -4,7 +4,7 @@ GameSound for Unity is a Unity Editor package that imports audio from GameSound 
 
 ## Features
 
-- Browser login against `https://gamesound.ai` with a short-lived Unity editor access token.
+- Browser login against `https://gamesound.ai` with a scoped token kept only for the current Unity editor session.
 - Project picker and manifest loader for GameSound project audio.
 - Import/update sounds into `Assets/GameSound` while preserving existing Unity `.meta` references on re-sync.
 - Search, source filter, folder grouping, browser preview, single import, and changed-only updates.
@@ -75,11 +75,17 @@ Backward-compatible base component. Use `GameSoundEventEmitter` for new objects 
 ## Notes
 
 - The package intentionally uses one fixed production API host: `https://gamesound.ai`.
-- Refresh tokens are not stored by the package. If the editor token expires, log in again.
+- The API host is internal and is not configurable in the Unity UI.
+- Access and refresh tokens are not persisted in global Unity `EditorPrefs`. Closing Unity ends the local plugin session; log in again next time.
+- Import roots are restricted to project-relative `Assets/` paths. Supported direct import formats are MP3, WAV, OGG, and AIF.
+- Updates download to a temporary file and replace the existing AudioClip only after validation, so a failed transfer does not destroy the last valid clip.
 - Auto Refresh is disabled by default because Unity audio imports can briefly block the editor and show progress bars. If enabled, it checks imported sounds every 30 minutes while the GameSound window is open.
 - Unity may warn that a source MP3 is truncated if the original uploaded MP3 has inconsistent frame length metadata. The importer validates incomplete HTTP downloads, but malformed source audio should be re-exported/re-uploaded in GameSound for a clean Unity import.
 - GameSound inspectors show project/title/folder/audio details and intentionally hide internal project/item/sound IDs and version hashes.
 - The inspector Play button previews audio through Unity Editor audio preview when not in Play Mode; in Play Mode it calls the runtime emitter.
+- Disable/Destroy play triggers create a detached one-shot so the sound can finish after the original object leaves the scene. Detached lifecycle playback never loops.
+- Newly created emitters play on `ObjectStart` by default. Change **Play Trigger** to `None` or `Manual` when playback should be controlled only from code.
+- Fade Out requires an active emitter. Disable/Destroy stop triggers therefore stop immediately; use another stop trigger for a timed fade.
 - `Documentation~` is kept without Unity `.meta` files because Unity treats `~` package folders as hidden package documentation.
 
 ## Requirements

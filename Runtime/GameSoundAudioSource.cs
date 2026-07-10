@@ -14,11 +14,10 @@ namespace GameSound.Unity
         [SerializeField] private bool syncClipOnValidate = true;
 
         [Header("Event Triggers")]
-        [SerializeField] private GameSoundEmitterTrigger playTrigger = GameSoundEmitterTrigger.None;
+        [SerializeField] private GameSoundEmitterTrigger playTrigger = GameSoundEmitterTrigger.ObjectStart;
         [SerializeField] private GameSoundEmitterTrigger stopTrigger = GameSoundEmitterTrigger.ObjectDisable;
         [SerializeField] private GameSoundStopMode stopMode = GameSoundStopMode.Immediate;
         [SerializeField, Min(0f)] private float fadeOutSeconds = 0.25f;
-        [SerializeField, HideInInspector] private bool stopOnDisable = true;
 
         [Header("Playback")]
         [SerializeField] private bool loop;
@@ -35,6 +34,7 @@ namespace GameSound.Unity
         [SerializeField, Range(MinSupportedPitch, 3f)] private float randomPitchMax = 1f;
 
         private Coroutine fadeRoutine;
+        private static bool applicationIsQuitting;
 
         public GameSoundAsset Sound
         {
@@ -47,7 +47,7 @@ namespace GameSound.Unity
             get
             {
                 EnsureSoundReference();
-                if (sound != null) soundReference.ApplyAsset(sound);
+                soundReference.ApplyAsset(sound);
                 return soundReference;
             }
         }
@@ -172,7 +172,7 @@ namespace GameSound.Unity
         protected virtual void OnValidate()
         {
             EnsureSoundReference();
-            if (sound != null) soundReference.ApplyAsset(sound);
+            soundReference.ApplyAsset(sound);
             if (minDistance < 0f) minDistance = 0f;
             if (maxDistance < minDistance) maxDistance = minDistance;
             randomPitchMin = NormalizePitch(randomPitchMin);
@@ -188,8 +188,9 @@ namespace GameSound.Unity
 
         protected virtual void Awake()
         {
+            applicationIsQuitting = false;
             EnsureSoundReference();
-            if (sound != null) soundReference.ApplyAsset(sound);
+            soundReference.ApplyAsset(sound);
             ApplyToAudioSource();
         }
 
@@ -211,18 +212,17 @@ namespace GameSound.Unity
 
         protected virtual void OnDisable()
         {
-            if (stopOnDisable)
-            {
-                StopWithConfiguredMode();
-                return;
-            }
-
             HandleTrigger(GameSoundEmitterTrigger.ObjectDisable);
         }
 
         protected virtual void OnDestroy()
         {
             HandleTrigger(GameSoundEmitterTrigger.ObjectDestroy);
+        }
+
+        protected virtual void OnApplicationQuit()
+        {
+            applicationIsQuitting = true;
         }
 
         protected virtual void OnTriggerEnter(Collider other)
@@ -344,16 +344,11 @@ namespace GameSound.Unity
             var source = GetComponent<AudioSource>();
             if (source == null) return;
 
-            if (sound != null)
-            {
-                source.clip = sound.Clip;
-            }
-            else if (soundReference != null && soundReference.Clip != null)
-            {
-                source.clip = soundReference.Clip;
-            }
+            source.clip = ResolveClip();
 
-            source.playOnAwake = PlayOnStart;
+            // GameSound owns playback through its trigger lifecycle. Leaving Unity's
+            // playOnAwake enabled would start the clip once before Start() and then restart it.
+            source.playOnAwake = false;
             source.loop = loop;
             source.volume = volume;
             source.spatialBlend = spatialBlend;
@@ -366,7 +361,14 @@ namespace GameSound.Unity
             if (trigger == GameSoundEmitterTrigger.None) return;
             if (playTrigger == trigger)
             {
-                Play();
+                if (trigger == GameSoundEmitterTrigger.ObjectDisable || trigger == GameSoundEmitterTrigger.ObjectDestroy)
+                {
+                    PlayDetachedOneShot();
+                }
+                else
+                {
+                    Play();
+                }
             }
 
             if (stopTrigger == trigger)
@@ -409,6 +411,58 @@ namespace GameSound.Unity
             source.Stop();
             source.volume = volume;
             fadeRoutine = null;
+        }
+
+        private AudioClip ResolveClip()
+        {
+            if (sound != null) return sound.Clip;
+            return soundReference != null ? soundReference.Clip : null;
+        }
+
+        private void PlayDetachedOneShot()
+        {
+            if (!Application.isPlaying || applicationIsQuitting) return;
+
+            var clip = ResolveClip();
+            if (clip == null) return;
+
+            var original = GetComponent<AudioSource>();
+            var detachedObject = new GameObject("GameSound One Shot");
+            detachedObject.hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSave;
+            detachedObject.transform.position = transform.position;
+            var detached = detachedObject.AddComponent<AudioSource>();
+            detached.clip = clip;
+            detached.playOnAwake = false;
+            detached.loop = false;
+            detached.volume = volume;
+            detached.spatialBlend = spatialBlend;
+            detached.minDistance = minDistance;
+            detached.maxDistance = maxDistance;
+
+            if (original != null)
+            {
+                detached.outputAudioMixerGroup = original.outputAudioMixerGroup;
+                detached.mute = original.mute;
+                detached.priority = original.priority;
+                detached.panStereo = original.panStereo;
+                detached.rolloffMode = original.rolloffMode;
+                detached.dopplerLevel = original.dopplerLevel;
+                detached.spread = original.spread;
+                detached.reverbZoneMix = original.reverbZoneMix;
+            }
+
+            var pitch = 1f;
+            if (randomizePitch)
+            {
+                var minPitch = NormalizePitch(randomPitchMin);
+                var maxPitch = Mathf.Max(minPitch, NormalizePitch(randomPitchMax));
+                pitch = Random.Range(minPitch, maxPitch);
+            }
+            detached.pitch = pitch;
+            detached.Play();
+
+            var lifetime = Mathf.Max(0.1f, clip.length / Mathf.Max(MinSupportedPitch, pitch) + 0.1f);
+            Destroy(detachedObject, lifetime);
         }
 
         private static float NormalizePitch(float value)

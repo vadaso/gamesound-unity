@@ -29,6 +29,24 @@ namespace GameSound.Unity.Editor
             }
 
             var clip = ResolveClip(component, reference);
+            if (component.StopMode == GameSoundStopMode.FadeOut &&
+                (component.StopTrigger == GameSoundEmitterTrigger.ObjectDisable ||
+                 component.StopTrigger == GameSoundEmitterTrigger.ObjectDestroy))
+            {
+                EditorGUILayout.HelpBox(
+                    "Fade Out cannot continue after the owning GameObject is disabled or destroyed, so this lifecycle stop is immediate. Use another stop trigger for a timed fade.",
+                    MessageType.Info);
+            }
+
+            if (component.Loop &&
+                (component.PlayTrigger == GameSoundEmitterTrigger.ObjectDisable ||
+                 component.PlayTrigger == GameSoundEmitterTrigger.ObjectDestroy))
+            {
+                EditorGUILayout.HelpBox(
+                    "Disable/Destroy playback is emitted as a detached one-shot and does not loop.",
+                    MessageType.Info);
+            }
+
             using (new EditorGUI.DisabledScope(clip == null))
             {
                 if (GUILayout.Button("Apply GameSound Clip to AudioSource"))

@@ -1,35 +1,40 @@
-using UnityEditor;
 using System;
+using System.IO;
+using UnityEditor;
 
 namespace GameSound.Unity.Editor
 {
     internal static class GameSoundEditorPrefs
     {
-        private const string BaseUrlKey = "GameSound.Unity.ApiBaseUrl";
+        public const string DefaultImportRoot = "Assets/GameSound";
+
+        private const string LegacyBaseUrlKey = "GameSound.Unity.ApiBaseUrl";
         private const string AccessTokenKey = "GameSound.Unity.AccessToken";
         private const string AccessTokenExpiresAtKey = "GameSound.Unity.AccessTokenExpiresAt";
-        private const string RefreshTokenKey = "GameSound.Unity.RefreshToken";
+        private const string LegacyRefreshTokenKey = "GameSound.Unity.RefreshToken";
         private const string ImportRootKey = "GameSound.Unity.ImportRoot";
         private const string AutoRefreshKey = "GameSound.Unity.AutoRefresh";
-        private const string ProductionApiBaseUrl = "https://gamesound.ai";
 
-        public static string ApiBaseUrl
+        static GameSoundEditorPrefs()
         {
-            get
+            // Versions before 0.3.8 persisted credentials and an editable API origin in
+            // global EditorPrefs. Production packages now use a fixed origin and keep the
+            // access token only for the lifetime of the current Unity editor session.
+            var legacyToken = EditorPrefs.GetString(AccessTokenKey, string.Empty);
+            var legacyExpiry = EditorPrefs.GetString(AccessTokenExpiresAtKey, string.Empty);
+            if (string.IsNullOrWhiteSpace(SessionState.GetString(AccessTokenKey, string.Empty)) &&
+                !string.IsNullOrWhiteSpace(legacyToken) &&
+                long.TryParse(legacyExpiry, out var expiresAt) &&
+                DateTimeOffset.UtcNow.ToUnixTimeSeconds() < expiresAt)
             {
-                // Production packages intentionally use one fixed API origin.
-                // Older package versions exposed an editable/dev base URL; overwrite it
-                // so public installs cannot accidentally authenticate against dev.
-                if (NormalizeBaseUrl(EditorPrefs.GetString(BaseUrlKey, string.Empty)) != ProductionApiBaseUrl)
-                {
-                    EditorPrefs.SetString(BaseUrlKey, ProductionApiBaseUrl);
-                }
-                return ProductionApiBaseUrl;
+                SessionState.SetString(AccessTokenKey, legacyToken);
+                SessionState.SetString(AccessTokenExpiresAtKey, legacyExpiry);
             }
-            set
-            {
-                EditorPrefs.SetString(BaseUrlKey, ProductionApiBaseUrl);
-            }
+
+            EditorPrefs.DeleteKey(LegacyBaseUrlKey);
+            EditorPrefs.DeleteKey(AccessTokenKey);
+            EditorPrefs.DeleteKey(AccessTokenExpiresAtKey);
+            EditorPrefs.DeleteKey(LegacyRefreshTokenKey);
         }
 
         public static string AccessToken
@@ -41,18 +46,18 @@ namespace GameSound.Unity.Editor
                     ClearTokens();
                     return string.Empty;
                 }
-                return EditorPrefs.GetString(AccessTokenKey, string.Empty);
+                return SessionState.GetString(AccessTokenKey, string.Empty);
             }
             set
             {
                 if (string.IsNullOrWhiteSpace(value))
                 {
-                    EditorPrefs.DeleteKey(AccessTokenKey);
-                    EditorPrefs.DeleteKey(AccessTokenExpiresAtKey);
+                    SessionState.EraseString(AccessTokenKey);
+                    SessionState.EraseString(AccessTokenExpiresAtKey);
                     return;
                 }
 
-                EditorPrefs.SetString(AccessTokenKey, value);
+                SessionState.SetString(AccessTokenKey, value);
             }
         }
 
@@ -61,13 +66,22 @@ namespace GameSound.Unity.Editor
             AccessToken = token;
             var ttl = Math.Max(60, expiresInSeconds);
             var expiresAt = DateTimeOffset.UtcNow.AddSeconds(ttl).ToUnixTimeSeconds();
-            EditorPrefs.SetString(AccessTokenExpiresAtKey, expiresAt.ToString());
+            SessionState.SetString(AccessTokenExpiresAtKey, expiresAt.ToString());
         }
 
         public static string ImportRoot
         {
-            get => EditorPrefs.GetString(ImportRootKey, "Assets/GameSound");
-            set => EditorPrefs.SetString(ImportRootKey, string.IsNullOrWhiteSpace(value) ? "Assets/GameSound" : value.Trim().TrimEnd('/'));
+            get
+            {
+                var saved = EditorPrefs.GetString(ImportRootKey, DefaultImportRoot);
+                var normalized = NormalizeImportRoot(saved);
+                if (!string.Equals(saved, normalized, StringComparison.Ordinal))
+                {
+                    EditorPrefs.SetString(ImportRootKey, normalized);
+                }
+                return normalized;
+            }
+            set => EditorPrefs.SetString(ImportRootKey, NormalizeImportRoot(value));
         }
 
         public static bool AutoRefreshEnabled
@@ -79,24 +93,82 @@ namespace GameSound.Unity.Editor
         public static void ClearTokens()
         {
             AccessToken = string.Empty;
+            SessionState.EraseString(AccessTokenExpiresAtKey);
+            EditorPrefs.DeleteKey(AccessTokenKey);
             EditorPrefs.DeleteKey(AccessTokenExpiresAtKey);
-            EditorPrefs.DeleteKey(RefreshTokenKey);
+            EditorPrefs.DeleteKey(LegacyRefreshTokenKey);
         }
 
-        private static string NormalizeBaseUrl(string value)
+        public static string NormalizeImportRoot(string value)
         {
-            if (string.IsNullOrWhiteSpace(value)) return ProductionApiBaseUrl;
-            return value.Trim().TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(value)) return DefaultImportRoot;
+
+            var candidate = value.Trim().Replace('\\', '/').TrimEnd('/');
+            while (candidate.Contains("//")) candidate = candidate.Replace("//", "/");
+
+            if (Path.IsPathRooted(candidate) ||
+                (candidate.Length >= 2 && char.IsLetter(candidate[0]) && candidate[1] == ':') ||
+                (!string.Equals(candidate, "Assets", StringComparison.Ordinal) &&
+                 !candidate.StartsWith("Assets/", StringComparison.Ordinal)))
+            {
+                return DefaultImportRoot;
+            }
+
+            var segments = candidate.Split('/');
+            foreach (var segment in segments)
+            {
+                if (string.IsNullOrWhiteSpace(segment) ||
+                    segment == "." ||
+                    segment == ".." ||
+                    ContainsInvalidPathCharacter(segment) ||
+                    HasInvalidWindowsPathEnding(segment) ||
+                    IsWindowsReservedPathSegment(segment))
+                {
+                    return DefaultImportRoot;
+                }
+            }
+
+            return candidate;
+        }
+
+        private static bool ContainsInvalidPathCharacter(string value)
+        {
+            foreach (var character in value)
+            {
+                if (character < 32 || "<>:\"|?*".IndexOf(character) >= 0) return true;
+            }
+            return false;
+        }
+
+        internal static bool IsWindowsReservedPathSegment(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+
+            var name = value.Trim();
+            var extensionIndex = name.IndexOf('.');
+            if (extensionIndex >= 0) name = name.Substring(0, extensionIndex);
+            name = name.TrimEnd(' ', '.').ToUpperInvariant();
+
+            if (name == "CON" || name == "PRN" || name == "AUX" || name == "NUL") return true;
+            if (name.Length == 4 && (name.StartsWith("COM", StringComparison.Ordinal) || name.StartsWith("LPT", StringComparison.Ordinal)))
+            {
+                return name[3] >= '1' && name[3] <= '9';
+            }
+
+            return false;
+        }
+
+        private static bool HasInvalidWindowsPathEnding(string value)
+        {
+            return value.EndsWith(" ", StringComparison.Ordinal) || value.EndsWith(".", StringComparison.Ordinal);
         }
 
         private static bool IsAccessTokenExpired()
         {
-            var expiresAtString = EditorPrefs.GetString(AccessTokenExpiresAtKey, string.Empty);
+            var expiresAtString = SessionState.GetString(AccessTokenExpiresAtKey, string.Empty);
             if (string.IsNullOrWhiteSpace(expiresAtString))
             {
-                // Legacy packages did not record token expiry. Force a fresh browser login
-                // rather than keeping an unknown-lifetime EditorPrefs token.
-                return !string.IsNullOrWhiteSpace(EditorPrefs.GetString(AccessTokenKey, string.Empty));
+                return !string.IsNullOrWhiteSpace(SessionState.GetString(AccessTokenKey, string.Empty));
             }
             if (!long.TryParse(expiresAtString, out var expiresAt)) return true;
             return DateTimeOffset.UtcNow.ToUnixTimeSeconds() >= expiresAt;

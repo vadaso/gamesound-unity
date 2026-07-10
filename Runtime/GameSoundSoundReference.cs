@@ -43,7 +43,20 @@ namespace GameSound.Unity
         public void ApplyAsset(GameSoundAsset newAsset)
         {
             asset = newAsset;
-            if (newAsset == null) return;
+            if (newAsset == null)
+            {
+                projectId = string.Empty;
+                projectName = string.Empty;
+                itemId = string.Empty;
+                soundId = string.Empty;
+                source = string.Empty;
+                versionHash = string.Empty;
+                title = string.Empty;
+                folderPath = string.Empty;
+                soundType = string.Empty;
+                format = string.Empty;
+                return;
+            }
 
             projectId = newAsset.ProjectId;
             projectName = newAsset.ProjectName;
@@ -59,19 +72,13 @@ namespace GameSound.Unity
 
         public bool Matches(string candidateItemId, string candidateSoundId)
         {
-            if (!string.IsNullOrWhiteSpace(candidateItemId) &&
-                string.Equals(itemId, candidateItemId, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(candidateItemId))
             {
-                return true;
+                return string.Equals(itemId, candidateItemId, StringComparison.OrdinalIgnoreCase);
             }
 
-            if (!string.IsNullOrWhiteSpace(candidateSoundId) &&
-                string.Equals(soundId, candidateSoundId, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            return false;
+            return !string.IsNullOrWhiteSpace(candidateSoundId) &&
+                   string.Equals(soundId, candidateSoundId, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

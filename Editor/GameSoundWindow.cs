@@ -18,13 +18,13 @@ namespace GameSound.Unity.Editor
         private int selectedSourceFilter;
         private Vector2 scroll;
         private string status = "Not connected";
-        private string currentManifestVersion = string.Empty;
         private bool busy;
         private bool showFallbackLoginCode;
         private string searchQuery = string.Empty;
         private DeviceStartResponse pendingLogin;
         private double nextAutoRefreshAt;
         private bool autoRefreshInFlight;
+        private int loginAttemptId;
         private readonly Dictionary<string, bool> folderFoldouts = new Dictionary<string, bool>();
 
         private GUIStyle heroTitleStyle;
@@ -54,6 +54,8 @@ namespace GameSound.Unity.Editor
 
         private void OnDisable()
         {
+            loginAttemptId++;
+            pendingLogin = null;
             SceneView.duringSceneGui -= OnSceneGUI;
             EditorApplication.update -= OnEditorUpdate;
         }
@@ -97,7 +99,6 @@ namespace GameSound.Unity.Editor
         {
             BeginCard("1. Connection", "Log in with your GameSound account and choose where imported audio assets are stored.");
 
-            DrawFixedApiHostRow();
             DrawImportRootRow();
 
             EditorGUILayout.Space(8);
@@ -116,9 +117,12 @@ namespace GameSound.Unity.Editor
                     }
                 }
 
-                if (GUILayout.Button("Logout", GUILayout.Height(34), GUILayout.Width(88)))
+                using (new EditorGUI.DisabledScope(busy))
                 {
-                    _ = LogoutAsync();
+                    if (GUILayout.Button("Logout", GUILayout.Height(34), GUILayout.Width(88)))
+                    {
+                        _ = LogoutAsync();
+                    }
                 }
             }
 
@@ -133,7 +137,7 @@ namespace GameSound.Unity.Editor
                     {
                         if (GUILayout.Button("Reopen Approval Page"))
                         {
-                            Application.OpenURL(pendingLogin.verificationUriComplete);
+                            Application.OpenURL(GameSoundApiClient.RequireHttpsUrl(pendingLogin.verificationUriComplete, "login"));
                         }
                         if (GUILayout.Button(showFallbackLoginCode ? "Hide Fallback Code" : "Show Fallback Code"))
                         {
@@ -199,7 +203,6 @@ namespace GameSound.Unity.Editor
             if (selectedProjectIndex != previousProjectIndex)
             {
                 items = Array.Empty<GameSoundManifestItemDto>();
-                currentManifestVersion = string.Empty;
                 ResetAutoRefreshTimer();
             }
             var project = CurrentProject;
@@ -219,10 +222,6 @@ namespace GameSound.Unity.Editor
                     if (!string.IsNullOrWhiteSpace(project.updatedAt))
                     {
                         EditorGUILayout.LabelField("Updated", project.updatedAt);
-                    }
-                    if (!string.IsNullOrWhiteSpace(currentManifestVersion))
-                    {
-                        EditorGUILayout.LabelField("Manifest", currentManifestVersion);
                     }
                 }
             }
@@ -322,7 +321,7 @@ namespace GameSound.Unity.Editor
 
                     EditorGUILayout.LabelField(string.IsNullOrWhiteSpace(item.title) ? "Untitled sound" : item.title, itemTitleStyle);
                     GUILayout.FlexibleSpace();
-                    if (GameSoundImporter.IsImportedAndCurrent(item, importedVersionIndex))
+                    if (GameSoundImporter.IsImportedAndCurrent(CurrentProject?.id, item, importedVersionIndex))
                     {
                         DrawBadge(GUILayoutUtility.GetRect(70, 20, GUILayout.Width(70)), "CURRENT", new Color(0.13f, 0.74f, 0.47f));
                     }
@@ -416,15 +415,6 @@ namespace GameSound.Unity.Editor
             return sceneView != null ? sceneView.pivot : Vector3.zero;
         }
 
-        private void DrawFixedApiHostRow()
-        {
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.LabelField("API Host", GUILayout.Width(92));
-                EditorGUILayout.SelectableLabel(GameSoundEditorPrefs.ApiBaseUrl, EditorStyles.textField, GUILayout.Height(18));
-            }
-        }
-
         private void DrawImportRootRow()
         {
             using (new EditorGUILayout.HorizontalScope())
@@ -433,9 +423,10 @@ namespace GameSound.Unity.Editor
                 GameSoundEditorPrefs.ImportRoot = EditorGUILayout.TextField(GameSoundEditorPrefs.ImportRoot);
                 if (GUILayout.Button("Reset", GUILayout.Width(76)))
                 {
-                    GameSoundEditorPrefs.ImportRoot = "Assets/GameSound";
+                    GameSoundEditorPrefs.ImportRoot = GameSoundEditorPrefs.DefaultImportRoot;
                 }
             }
+            EditorGUILayout.LabelField("Imports are restricted to a project-relative Assets/ folder.", mutedLabelStyle);
         }
 
         private void DrawInlineStatus()
@@ -560,19 +551,24 @@ namespace GameSound.Unity.Editor
         {
             await RunBusyAsync(async () =>
             {
+                var attemptId = ++loginAttemptId;
                 var api = CreateApi();
-                pendingLogin = await api.StartDeviceLoginAsync();
+                var login = await api.StartDeviceLoginAsync();
+                if (attemptId != loginAttemptId) return;
+
+                pendingLogin = login;
                 showFallbackLoginCode = false;
                 status = "Opened browser. Approve GameSound connection there to continue.";
-                Application.OpenURL(pendingLogin.verificationUriComplete);
+                Application.OpenURL(GameSoundApiClient.RequireHttpsUrl(login.verificationUriComplete, "login"));
                 Repaint();
 
-                var interval = Mathf.Clamp(pendingLogin.interval, 2, 10);
-                var deadline = DateTimeOffset.UtcNow.AddSeconds(Mathf.Max(60, pendingLogin.expiresIn));
-                while (DateTimeOffset.UtcNow < deadline)
+                var interval = Mathf.Clamp(login.interval, 2, 10);
+                var deadline = DateTimeOffset.UtcNow.AddSeconds(Mathf.Max(60, login.expiresIn));
+                while (attemptId == loginAttemptId && DateTimeOffset.UtcNow < deadline)
                 {
                     await Task.Delay(interval * 1000);
-                    var poll = await api.PollDeviceLoginAsync(pendingLogin.deviceCode);
+                    if (attemptId != loginAttemptId) return;
+                    var poll = await api.PollDeviceLoginAsync(login.deviceCode);
                     if (string.Equals(poll.status, "approved", StringComparison.OrdinalIgnoreCase))
                     {
                         if (string.IsNullOrWhiteSpace(poll.accessToken))
@@ -590,9 +586,12 @@ namespace GameSound.Unity.Editor
                     Repaint();
                 }
 
-                pendingLogin = null;
-                showFallbackLoginCode = false;
-                status = "Login timed out. Click Login in Browser to try again.";
+                if (attemptId == loginAttemptId)
+                {
+                    pendingLogin = null;
+                    showFallbackLoginCode = false;
+                    status = "Login timed out. Click Login in Browser to try again.";
+                }
             });
         }
 
@@ -632,10 +631,10 @@ namespace GameSound.Unity.Editor
 
         private void ClearLocalSession()
         {
+            loginAttemptId++;
             GameSoundEditorPrefs.ClearTokens();
             projects = Array.Empty<GameSoundProjectDto>();
             items = Array.Empty<GameSoundManifestItemDto>();
-            currentManifestVersion = string.Empty;
             pendingLogin = null;
             showFallbackLoginCode = false;
         }
@@ -673,7 +672,7 @@ namespace GameSound.Unity.Editor
                 var project = CurrentProject;
                 if (project == null) return;
                 var download = await CreateApi().CreateDownloadAsync(project.id, item.soundId);
-                Application.OpenURL(download.url);
+                Application.OpenURL(GameSoundApiClient.RequireHttpsUrl(download.url, "preview"));
                 status = $"Opened preview URL for {item.title}";
             });
         }
@@ -711,7 +710,6 @@ namespace GameSound.Unity.Editor
             if (project == null) return;
             var response = await api.GetManifestAsync(project.id);
             items = response.items ?? Array.Empty<GameSoundManifestItemDto>();
-            currentManifestVersion = response.manifestVersion ?? string.Empty;
             if (!quiet)
             {
                 status = $"Loaded {items.Length} sound(s) from {project.name}";
@@ -741,12 +739,12 @@ namespace GameSound.Unity.Editor
             var syncItems = manifestItems ?? Array.Empty<GameSoundManifestItemDto>();
             foreach (var item in syncItems)
             {
-                if (onlyImported && !GameSoundImporter.IsImported(item, importedVersionIndex))
+                if (onlyImported && !GameSoundImporter.IsImported(project.id, item, importedVersionIndex))
                 {
                     continue;
                 }
 
-                if (GameSoundImporter.IsImportedAndCurrent(item, importedVersionIndex))
+                if (GameSoundImporter.IsImportedAndCurrent(project.id, item, importedVersionIndex))
                 {
                     if (GameSoundImporter.RefreshMetadataIfImported(project, item))
                     {
@@ -769,7 +767,7 @@ namespace GameSound.Unity.Editor
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(item.versionHash) && GameSoundImporter.IsImported(item, importedVersionIndex))
+                if (string.IsNullOrWhiteSpace(item.versionHash) && GameSoundImporter.IsImported(project.id, item, importedVersionIndex))
                 {
                     if (GameSoundImporter.RefreshMetadataIfImported(project, item))
                     {
@@ -806,6 +804,7 @@ namespace GameSound.Unity.Editor
 
             var component = go.AddComponent<GameSoundEventEmitter>();
             component.ApplyRemoteAsset(asset);
+            component.PlayTrigger = GameSoundEmitterTrigger.ObjectStart;
             ApplyManifestUnitySettings(component, item);
             component.ApplyToAudioSource();
             Selection.activeGameObject = go;
@@ -819,9 +818,9 @@ namespace GameSound.Unity.Editor
 
             var settings = item.unity;
             component.Loop = settings.loop;
-            component.Volume = settings.volume > 0f ? settings.volume : 1f;
+            component.Volume = Mathf.Clamp01(settings.volume);
             component.SpatialBlend = Mathf.Clamp01(settings.spatialBlend);
-            component.MinDistance = settings.minDistance > 0f ? settings.minDistance : 1f;
+            component.MinDistance = Mathf.Max(0f, settings.minDistance);
             component.MaxDistance = settings.maxDistance >= component.MinDistance ? settings.maxDistance : Mathf.Max(component.MinDistance, 500f);
 
             var hasPitchRange = !Mathf.Approximately(settings.randomPitchMin, 0f) || !Mathf.Approximately(settings.randomPitchMax, 0f);
@@ -890,7 +889,7 @@ namespace GameSound.Unity.Editor
 
         private GameSoundApiClient CreateApi()
         {
-            return new GameSoundApiClient(GameSoundEditorPrefs.ApiBaseUrl, GameSoundEditorPrefs.AccessToken);
+            return new GameSoundApiClient(GameSoundEditorPrefs.AccessToken);
         }
 
         private Task RunBusyAsync(Func<Task> action)

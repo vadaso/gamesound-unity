@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.8
+
+- Fix the production API origin to `https://gamesound.ai` internally and remove API host rows from Unity setup/connection UI.
+- Store the scoped access token only for the current Unity editor session and remove legacy persisted credentials.
+- Restrict import roots to project-relative `Assets/` paths and sanitize remote folder/file paths across platforms.
+- Allow only Unity-supported audio extensions so remote metadata cannot create arbitrary asset file types.
+- Download into a validated temporary file before replacing an existing AudioClip, preserving the previous clip on network or size-validation failure.
+- Refuse non-atomic update fallbacks, unsafe legacy clip paths, and Windows-reserved remote file/folder names.
+- Scope imported asset lookup by GameSound project so the same sound used in multiple projects cannot overwrite shared metadata.
+- Clear stale GameSound reference data and the AudioSource clip when a sound is unassigned.
+- Make newly created emitters play on Object Start, remove duplicate `playOnAwake` playback, and make disable/destroy play triggers emit detached one-shots.
+- Honor zero volume and zero minimum-distance values from project Unity settings.
+- Hide the internal manifest version from the GameSound window.
+
 ## 0.3.7
 
 - Hide internal project/item/sound IDs and version hashes from GameSound Unity inspectors.

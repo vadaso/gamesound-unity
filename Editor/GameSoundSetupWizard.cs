@@ -36,9 +36,7 @@ namespace GameSound.Unity.Editor
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
                 EditorGUILayout.LabelField("1. Connection", EditorStyles.boldLabel);
-                EditorGUILayout.LabelField("API Host", GameSoundEditorPrefs.ApiBaseUrl);
-                EditorGUILayout.HelpBox("Public packages always connect to gamesound.ai. There is no per-project API URL to configure.", MessageType.None);
-                EditorGUILayout.LabelField("Login", string.IsNullOrWhiteSpace(GameSoundEditorPrefs.AccessToken) ? "Not connected" : "Token saved");
+                EditorGUILayout.LabelField("Login", string.IsNullOrWhiteSpace(GameSoundEditorPrefs.AccessToken) ? "Not connected" : "Connected for this Unity session");
                 if (GUILayout.Button("Open GameSound Window"))
                 {
                     GameSoundWindow.Open();
@@ -52,6 +50,7 @@ namespace GameSound.Unity.Editor
             {
                 EditorGUILayout.LabelField("2. Import Folder", EditorStyles.boldLabel);
                 GameSoundEditorPrefs.ImportRoot = EditorGUILayout.TextField("Import Root", GameSoundEditorPrefs.ImportRoot);
+                EditorGUILayout.HelpBox("The import root must stay inside this project's Assets/ folder.", MessageType.None);
                 var valid = AssetDatabase.IsValidFolder(GameSoundEditorPrefs.ImportRoot);
                 EditorGUILayout.LabelField("Status", valid ? "Exists" : "Missing");
                 if (!valid && GUILayout.Button("Create Import Folder"))
@@ -67,7 +66,7 @@ namespace GameSound.Unity.Editor
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
                 EditorGUILayout.LabelField("3. Scene Audio", EditorStyles.boldLabel);
-                var listener = Object.FindObjectOfType<AudioListener>();
+                var listener = Object.FindFirstObjectByType<AudioListener>();
                 EditorGUILayout.LabelField("Audio Listener", listener == null ? "Missing" : listener.name);
                 if (listener == null)
                 {
